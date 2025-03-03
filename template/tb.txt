@@ -1,0 +1,213 @@
+#include <verilated.h>
+#include <verilated_vcd_c.h>
+#include <stdio.h>
+#include <vector>
+#include <time.h>
+#include <cmath>
+#include <iostream>
+#include <V{modulename}__Syms.h>
+#include <assert.h>
+
+using namespace std;
+
+#define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
+#define MAX_SIM_TIME 300
+#define VERIF_START_TIME 7
+#define myexit(condition) \
+    {{                                    \
+        if (!(condition))                \
+            exit(1);                     \
+    }}
+
+vluint64_t sim_time = 0;
+vluint64_t tx_data_gen_time = 0;
+
+class {modulename}InTx
+{{
+public:
+    // TODO 1
+}};
+
+class {modulename}OutTx
+{{
+public:
+    // TODO 2
+}};
+
+class {modulename}Scb
+{{
+private:
+    std::deque<{modulename}InTx *> in_q;
+
+public:
+    // Input interface monitor port
+    void writeIn({modulename}InTx *tx)
+    {{
+        // Push the received transaction item into a queue for later
+        in_q.push_back(tx);
+    }}
+
+    // Output interface monitor port
+    void writeOut({modulename}OutTx *tx)
+    {{
+        // We should never get any data from the output interface
+        // before an input gets driven to the input interface
+        if (in_q.empty())
+        {{
+            std::cout << "Fatal Error in {modulename}Scb: empty {modulename}InTx queue" << std::endl;
+            exit(1);
+        }}
+
+        // Grab the transaction item from the front of the input item queue
+        {modulename}InTx *in;
+        in = in_q.front();
+        in_q.pop_front();
+
+        // TODO 3
+
+        delete in;
+        delete tx;
+    }}
+}};
+
+class {modulename}InDrv
+{{
+private:
+    V{modulename} *dut;
+
+public:
+    {modulename}InDrv(V{modulename} *dut)
+    {{
+        this->dut = dut;
+    }}
+
+    void drive({modulename}InTx *tx)
+    {{
+        // TODO 4
+        
+        delete tx;
+        dut->eval();
+    }}
+}};
+
+class {modulename}InMon
+{{
+private:
+    V{modulename} *dut;
+    {modulename}Scb *scb;
+
+public:
+    {modulename}InMon(V{modulename} *dut, {modulename}Scb *scb)
+    {{
+        this->dut = dut;
+        this->scb = scb;
+    }}
+    void monitor()
+    {{
+        {modulename}InTx *tx = new {modulename}InTx();
+
+        // TODO 5
+
+        scb->writeIn(tx);
+    }}
+}};
+
+class {modulename}OutMon
+{{
+private:
+    V{modulename} *dut;
+    {modulename}Scb *scb;
+
+public:
+    {modulename}OutMon(V{modulename} *dut, {modulename}Scb *scb)
+    {{
+        this->dut = dut;
+        this->scb = scb;
+    }}
+    void monitor()
+    {{
+        {modulename}OutTx *tx = new {modulename}OutTx();
+        
+        // TODO 6
+
+        scb->writeOut(tx);
+    }}
+}};
+
+{modulename}InTx *rndAluInTx()
+{{
+    {modulename}InTx *tx = new {modulename}InTx();
+    if (IS_SIM_TIME_IN_RST(sim_time))
+        tx->rst = 0;
+    
+    // TODO 7
+
+    else
+    {{
+        delete tx;
+        return NULL;
+    }}
+
+    tx_data_gen_time += tx->rst;
+    return tx;
+}}
+
+int main(int argc, char **argv)
+{{
+    srand(time(NULL));
+    Verilated::commandArgs(argc, argv);
+    V{modulename} *dut = new V{modulename};
+
+    Verilated::traceEverOn(true);
+    VerilatedVcdC *m_trace = new VerilatedVcdC;
+    dut->trace(m_trace, 5);
+    m_trace->open("waveform.vcd");
+
+    {modulename}InTx *tx;
+
+    // Here we create the driver, scoreboard, input and output monitor blocks
+    {modulename}InDrv *drv = new {modulename}InDrv(dut);
+    {modulename}Scb *scb = new {modulename}Scb();
+    {modulename}InMon *inMon = new {modulename}InMon(dut, scb);
+    {modulename}OutMon *outMon = new {modulename}OutMon(dut, scb);
+
+    while (sim_time < MAX_SIM_TIME)
+    {{
+        dut->clk ^= 1;
+
+        // Do all the driving/monitoring on a positive edge
+        if ((dut->clk == 1 || IS_SIM_TIME_IN_RST(sim_time)) && sim_time)
+        {{
+
+            tx = rndAluInTx();
+            // Generate a randomised transaction item of type AluInTx
+
+            // Pass the transaction item to the ALU input interface driver,
+            // which drives the input interface based on the info in the
+            // transaction item
+            drv->drive(tx);
+
+            // Monitor the input interface
+            inMon->monitor();
+
+            // Monitor the output interface
+            outMon->monitor();
+        }}
+        else
+            dut->eval();
+
+        // end of positive edge processing
+
+        m_trace->dump(sim_time);
+        sim_time++;
+    }}
+
+    m_trace->close();
+    delete dut;
+    delete outMon;
+    delete inMon;
+    delete scb;
+    delete drv;
+    exit(EXIT_SUCCESS);
+    return 0;
+}}

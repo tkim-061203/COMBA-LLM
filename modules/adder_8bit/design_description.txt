@@ -1,0 +1,15 @@
+Please act as a professional verilog designer.
+
+{description}
+
+Module name:
+    {modulename} 
+Input ports:
+    {iports}
+Output ports:
+    {oports}
+
+Implementation:
+{implementation}
+
+Give me the complete code.
