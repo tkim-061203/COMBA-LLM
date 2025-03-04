@@ -3,6 +3,16 @@
 - Templating the creation of new module.
 - Templating Makefile: run command of verilator
 
+# 0.1.0
+
+`04-03-2025`
+
+- Generate raw Verilog
+  - Default system prompt
+  - No context holder.
+  - Get description of each module?
+- Markdown Code Extraction
+
 # 0.0.0
 
 `02-03-2025`

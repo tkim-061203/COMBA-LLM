@@ -1,1 +1,4 @@
 .work
+.env
+.ignore
+**/*.pyc

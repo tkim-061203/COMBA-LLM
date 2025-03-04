@@ -1,4 +1,6 @@
 import argparse, os, shutil, subprocess, typing, re
+from scripts.langchain_groq_util import generate as llmGenerate
+from scripts.markdown_code_extract import md_code_extract
 
 modulefolder="modules"
 templatefolder="template"
@@ -9,7 +11,7 @@ temporaryWorkFolderName=".work"
 categoryFileName = "category"
 
 parser = argparse.ArgumentParser(
-                    prog='DESLAPP Template',
+                    prog='LLM Prompt Template',
                     description='What the program does',
                     epilog='Text at the bottom of help')
 # parser.add_argument('command', choices=["createmodule"])           # positional argument
@@ -24,6 +26,9 @@ parser_runverified.add_argument('modules',nargs="*")
 
 parser_makeverified = subparsers.add_parser('makeverified', help='Create work folder for projects with verified verilog module')
 parser_makeverified.add_argument('modules',nargs="*")
+
+parser_generate = subparsers.add_parser('generate', help='Generate Verilog module')
+parser_generate.add_argument('modules',nargs="*")
 
 args = parser.parse_args()
 
@@ -94,7 +99,7 @@ def runverified(modulePaths:typing.List[str]):
     moduleWorkList = ' '.join([re.sub(fr'^{modulefolder}', temporaryWorkFolderName, moduleNormPath) for moduleNormPath in moduleNormPaths])
     
     result = subprocess.run(['make', moduleWorkList], stdout=subprocess.PIPE)
-    print('code:', result.returncode, '\nmess:', result.stdout.decode('utf-8'))
+    print('Return code:', result.returncode, '\nmess:', result.stdout.decode('utf-8'))
 
 def makeverified(modulePaths:list):
     if os.path.isdir(temporaryWorkFolderName):
@@ -120,7 +125,16 @@ def makeverified(modulePaths:list):
         os.link(moduleVerifiedPath, moduleWorkPath)
 
 
+def generate(modulePaths:list):
+    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
+    for moduleNormPath in moduleNormPaths:
+        # descriptionContent = open()
+        descriptionFile = open(os.path.join(moduleNormPath, descriptionFileName), 'r')
+        descritionContent = descriptionFile.read()
+        descriptionFile.close()
         
+        llmtext = llmGenerate(descritionContent)
+        print("llm code: ", md_code_extract(llmtext))
 
 
 match args.command:
@@ -128,10 +142,11 @@ match args.command:
         createmodule()
     case 'runverified':
         runverified(args.modules)
-        pass
+        
     case 'makeverified':
         makeverified(args.modules)
-        pass
+    case 'generate':
+        generate(args.modules)
 
 print("your args", args)
 

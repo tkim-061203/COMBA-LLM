@@ -1,15 +1,18 @@
 Please act as a professional verilog designer.
 
-{description}
+Implement a module of an 8-bit adder with multiple bit-level adders in combinational logic. 
 
-Module name:
-    {modulename} 
+Module name:  
+    adder_8bit               
 Input ports:
-    {iports}
+    a[7:0]: 8-bit input operand A.
+    b[7:0]: 8-bit input operand B.
+    cin: Carry-in input.
 Output ports:
-    {oports}
+    sum[7:0]: 8-bit output representing the sum of A and B.
+    cout: Carry-out output.
 
 Implementation:
-{implementation}
+The module utilizes a series of bit-level adders (full adders) to perform the addition operation.
 
 Give me the complete code.
