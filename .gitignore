@@ -1,4 +1,6 @@
 .work
+.llmwork
 .env
 .ignore
 **/*.pyc
+**/.llmcache

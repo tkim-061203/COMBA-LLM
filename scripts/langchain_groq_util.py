@@ -11,7 +11,9 @@ model = ChatGroq(
 )
 
 defaultTemplate = ChatPromptTemplate([
-    ("system", "Please act as a professional verilog designer."),
+    ("system", """Please act as a professional verilog designer.
+     You will provide Verilog Code to A Verilog Compiler, called Verilator.
+     Please provide single module or module compositions that can be contruct in a Verilog file."""),
     # Means the template will receive an optional list of messages under
     # the "conversation" key
     ("placeholder", "{conversation}"),

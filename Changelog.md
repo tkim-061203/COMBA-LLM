@@ -2,6 +2,9 @@
 
 - Templating the creation of new module.
 - Templating Makefile: run command of verilator
+- LLM Generation History
+- Format the input of module folder.
+- Descriptions of components in a module folder.
 
 # 0.1.0
 
@@ -11,7 +14,14 @@
   - Default system prompt
   - No context holder.
   - Get description of each module?
-- Markdown Code Extraction
+- Markdown Code Extraction.
+- Single Module Composition.
+  - Store LLM output to file. llmgen.v. and history cache
+    - cache by datetime.
+- Parameterizing `makeWorkingFolder`.
+  - Modify `createModule`.
+  - create `.llmwork` or `.work`.
+  - generate LLM content if no content?
 
 # 0.0.0
 
