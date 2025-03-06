@@ -1,10 +1,31 @@
+# Purpose
+
+- Improve RTLLM
+- Mechanism: LLM-powered Verilog Syntax Checking.
+
+# Limitations
+
+- Only for LLM-powered Syntax Checking.
+- No middleware.
+- Specibility:
+  - Iteration for querying LLM and Syntax checking. With log infomation
+
 # Further
 
-- Templating the creation of new module.
-- Templating Makefile: run command of verilator
-- LLM Generation History
 - Format the input of module folder.
 - Descriptions of components in a module folder.
+- GUI for mannagement.
+- Templating the creation of new module. [x]
+- Templating Makefile: run command of verilator [x]
+- LLM Generation History [x].
+
+# Next abstraction
+
+- ?
+
+# 0.2.0
+
+`06-03-2025`
 
 # 0.1.0
 

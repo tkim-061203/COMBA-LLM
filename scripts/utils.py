@@ -8,4 +8,4 @@ def md_code_extract(text:str):
 def generateWorkFolderArgument(llm=False):
     if llm:
         return (Template.TEMPORARYLLMWORKFOLDERNAME.value, ModuleNamePrefix.LLM.value)
-    return (Template.TEMPORARYWORKFOLDERNAME.value, ModuleNamePrefix.VERIFIED.value)
+    return ( Template.TEMPORARYWORKFOLDERNAME.value, ModuleNamePrefix.VERIFIED.value)
