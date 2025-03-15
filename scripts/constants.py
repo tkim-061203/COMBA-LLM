@@ -1,24 +1,42 @@
 from enum import Enum
+from typing_extensions import TypedDict
+
 
 class Template(Enum):
-    MODULEFOLDER="modules"
-    TEMPLATEFOLDER="template"
-    DESCRIPTIONFILENAME="design_description.txt"
-    TBFILENAME="tb.txt"
-    MODULEFILENAME="module.txt"
-    TEMPORARYWORKFOLDERNAME=".work"
+    MODULEFOLDER = "modules"
+    TEMPLATEFOLDER = "template"
+    DESCRIPTIONFILENAME = "design_description.txt"
+    TBFILENAME = "tb.txt"
+    MODULEFILENAME = "module.txt"
+    TEMPORARYWORKFOLDERNAME = ".work"
     CATEGORYFILENAME = "category"
-    TEMPORARYLLMWORKFOLDERNAME=".llmwork"
-    LLMCACHEFOLDER='.llmcache'
+    TEMPORARYLLMWORKFOLDERNAME = ".llmwork"
+    LLMCACHEFOLDER = ".llmcache"
+
 
 class Commands(Enum):
-    RUNVERIFIED = 'runverified'
-    CREATEMODULE = 'createmodule'
-    MAKEVERIFIED = 'makeverified'
-    GENERATE = 'generate'
-    RUNWORK = 'run'
-    MAKEWORK = 'makework'
+    RUNVERIFIED = "runverified"
+    CREATEMODULE = "createmodule"
+    MAKEVERIFIED = "makeverified"
+    GENERATE = "generate"
+    RUNWORK = "run"
+    MAKEWORK = "makework"
+    RAG = "rag"
+
 
 class ModuleNamePrefix(Enum):
-    LLM = 'llm_'
-    VERIFIED = 'verified_'
+    LLM = "llm_"
+    VERIFIED = "verified_"
+
+
+class WarningExtraction(TypedDict):
+    warningTitle: str
+    fileName: str
+    lineNumber: str
+    posNumber: str
+    warningContent: str
+
+
+class LLMAgentStatus(Enum):
+    INIT = 0
+    SUCCESS = 1

@@ -8,6 +8,12 @@ define verilating_template
 	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-ENUMVALUE -Wno-DECLFILENAME"
 endef
 
+define lintonly_verilating_template
+./${WORKDIR}/$(1)/lint: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
+	@ echo "###Verilating for $(1)###"
+	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --lint-only --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-ENUMVALUE -Wno-DECLFILENAME"
+endef
+
 define binmake_template
 ./${WORKDIR}/$(1)/obj_dir/V$(1): ./${WORKDIR}/$(1)/obj_dir/V$(1).h
 	@ echo "###Binary creation for $(1)###"
@@ -30,6 +36,9 @@ endef
 
 $(foreach design, $(DESIGNS), $(eval $(call verilating_template,$(design))))
 $(foreach design, $(DESIGNS), $(eval $(call binmake_template,$(design))))
+
+.PHONY: $(patsubst %, ${WORKDIR}/%/lint, $(DESIGNS))
+$(foreach design, $(DESIGNS), $(eval $(call lintonly_verilating_template,$(design))))
 
 .PHONY: $(patsubst %, ${WORKDIR}/%, $(DESIGNS))
 $(foreach design, $(DESIGNS), $(eval $(call run_template,$(design))))

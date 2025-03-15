@@ -9,6 +9,8 @@
 - No middleware.
 - Specibility:
   - Iteration for querying LLM and Syntax checking. With log infomation
+- NO agent framework
+- No abstract class for LLM call or role change
 
 # Further
 
@@ -18,10 +20,12 @@
 - Templating the creation of new module. [x]
 - Templating Makefile: run command of verilator [x]
 - LLM Generation History [x].
+- Click alternative to ArgumentParser.
 
-# Next abstraction
+# 0.3.0
 
-- ?
+- Import an PDF as RAG source.
+- Warning extraction from log
 
 # 0.2.0
 
