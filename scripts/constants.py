@@ -40,3 +40,4 @@ class WarningExtraction(TypedDict):
 class LLMAgentStatus(Enum):
     INIT = 0
     SUCCESS = 1
+    ERROR = 2

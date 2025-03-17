@@ -21,6 +21,7 @@
 - Templating Makefile: run command of verilator [x]
 - LLM Generation History [x].
 - Click alternative to ArgumentParser.
+- Tuple alternative for speeding!
 
 # 0.3.0
 
