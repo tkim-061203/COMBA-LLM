@@ -1,3 +1,18 @@
+# Rework 3.0: Langraph
+
+## Limit
+
+- Loop call
+- No iteration
+
+## 2.0.0
+
+- Speed up with Langraph
+
+- No iteration for framework.
+  - Only for looping.
+- Memory
+
 # Purpose
 
 - Improve RTLLM

@@ -1,141 +1,64 @@
-from .constants import LLMAgentStatus, ModuleNamePrefix, Template
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableSerializable
-from langchain_core.messages.base import BaseMessage
-import re, os, subprocess
-from langchain_core.messages import HumanMessage
-from .lazy import modulePathToModuleWorkPath, getMainLLMFilenamePath, readFileContent
+import getpass
 import os
+from typing import Annotated
+
+from typing_extensions import TypedDict
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langchain.chat_models import init_chat_model
-from langchain_ollama import OllamaEmbeddings
-from langchain_milvus import Milvus
-from langchain_core.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
+
+
+class State(TypedDict):
+    # Messages have the type "list". The `add_messages` function
+    # in the annotation defines how this state key should be updated
+    # (in this case, it appends messages to the list, rather than overwriting them)
+    messages: Annotated[list, add_messages]
+
 
 class LLMCodeAgent:
-    def __init__(self, modulePath: str, milvus_URI="http://localhost:19530"):
-        self._modulePath = modulePath
-        self._moduleWorkPath = modulePathToModuleWorkPath(self._modulePath)
-        self._modulePathLint = os.path.join(self._moduleWorkPath, "lint")
-        self._curLLMCode = ""
-        self._workFolderName = Template.TEMPORARYLLMWORKFOLDERNAME.value
-        self._chat_history = []
+    def __init__(self, modulePath: str):
+        if not os.environ.get("GROQ_API_KEY"):
+            os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
 
-        # init history
+        self._llm = init_chat_model("llama3-8b-8192", model_provider="groq")
 
-        # description
-        description = readFileContent(os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value))
-        
-        # code
-        code = readFileContent(getMainLLMFilenamePath(self._moduleWorkPath))
+        graph_builder = StateGraph(State)
 
-        self._chat_history.extend([HumanMessage(content=description), code])
-
-        # 
-        self._llm = init_chat_model("llama3-70b-8192", model_provider="groq")
-        self._embeddings = OllamaEmbeddings(model="llama3", base_url="http://127.0.0.1:32320", )
-
-        self._vector_store = Milvus(embedding_function=self._embeddings,connection_args={"uri": milvus_URI, "token": "root:Milvus", "db_name": "milvus_demo"},index_params={"index_type": "FLAT", "metric_type": "L2"},
-            consistency_level="Strong",
-            drop_old=False,  # set to True if seeking to drop the collection with that name if it exists
-            )
-        self_retriever = self._vector_store.as_retriever()
-    
-    @tool(response_format="content_and_artifact")
-    def retrieve(self, query: str):
-        """Retrieve information related to a query."""
-        retrieved_docs = self._vector_store.similarity_search(query, k=2)
-        serialized = "\n\n".join(
-            (f"Source: {doc.metadata}\n" f"Content: {doc.page_content}")
-            for doc in retrieved_docs
-        )
-        return serialized, retrieved_docs
-    
-    def __iter__(self):
-        self.a = 1
-        self.status = "error"
-        return self
-
-    def warning_list(self, log: str, firstOnly=True):
-        WarningRegex = re.compile(
-            r"%(?P<exceptionType>Warning)-(?P<exceptionTitle>[A-Z]*):\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*):\s(?P<exceptionContent>.*)",
-            re.MULTILINE,
-        )
-
-        founds = [
-            found.groupdict() | {"span": found.span()}
-            for found in WarningRegex.finditer(log)
-        ]
-
-        lineWarningContentRegex = re.compile(
-            r"(?P<lineNumber>\d+)\s\|\s(?P<logContent>.+)", re.MULTILINE
-        )
-        for i in range(len(founds)) if not firstOnly else [0]:
-            curSpan = founds[i]["span"][1] + 1
-            nextSpan = founds[i + 1]["span"][0] - 1 if i != len(founds) - 1 else -1
-
-            extractSpan = (curSpan, nextSpan)
-
-            logContent = (
-                log[extractSpan[0] : extractSpan[1]]
-                if nextSpan != -1
-                else log[extractSpan[0] :]
-            )
-            # error
-            founds[i]["exceptionContent"] = founds[i]["exceptionContent"].replace(
-                "\r", ""
-            )
-            founds[i]["logContent"] = "\n".join(
-                [
-                    f"Line {line.group('lineNumber')}: {line.group('logContent')}"
-                    # line
-                    for line in lineWarningContentRegex.finditer(logContent)
-                ]
-            )
-
-        return founds
-
-    def cur_res(self):
-        # current llm code
-
-        # cache current
-        curLLMCodeFilePath = getMainLLMFilenamePath(self._moduleWorkPath)
-        curLLMCodeFile = open(curLLMCodeFilePath, "r+")
-        self._curLLMCode = curLLMCodeFile.read()
-        curLLMCodeFile.close()
-
-        # currentLLMFile = open(self._moduleWorkPath,'r+')
-
-        result = subprocess.run(
-            [
-                "make",
-                self._modulePathLint,
-                f"WORKDIR={self._workFolderName}",
-            ],
-            stdout=subprocess.PIPE,
-        )
-
-        resultSTDOUTUTF8 = result.stdout.decode("utf8")
+        graph_builder.add_node("chatbot", self.chatbot)
+        graph_builder.add_edge(START, "chatbot")
+        graph_builder.add_edge("chatbot", END)
 
         #
-        # warning list
-        firstWarning, *_ = self.warning_list(resultSTDOUTUTF8)
+        # memory
+        memory = MemorySaver()
 
-        if isinstance(firstWarning, dict):
-            return {"status": LLMAgentStatus.ERROR.value, "content": firstWarning}
-        # if type(firstWarning) == 'dict'
+        self._graph = graph_builder.compile(checkpointer=memory)
 
-        return {"status": "success", "content": ""}
+        #
+        # config
+        self._config = {"configurable": {"thread_id": "1"}}
 
-    @property
-    def rag_chain(self):
-        
+    def chatbot(self, state: State):
+        # print("messages update:", state["messages"])
+        return {"messages": [self._llm.invoke(state["messages"])]}
 
-    def invoke(self, user_input:str):
-        ai_msg = rag_chain.invoke({"input": user_input, "chat_history": self._chat_history})
-        self._chat_history.extend([HumanMessage(content=user_input), ai_msg["answer"]])
-        print(ai_msg["answer"])
-        return ''
+    def stream_graph_updates(self, user_input: str):
+        # for event in self._graph.stream(
+        #     {"messages": [{"role": "user", "content": user_input}]},
+        #     self._config,
+        #     stream_mode="values",
+        # ):
+        #     for value in event.values():
+        #         print("Assistant:", value["messages"][-1].content)
+        events = self._graph.stream(
+            {"messages": [{"role": "user", "content": user_input}]},
+            self._config,
+            stream_mode="values",
+        )
+        for event in events:
+            event["messages"][-1].pretty_print()
 
     def __next__(self):
         confirm = input(f"Next? (y/n) ")
@@ -143,26 +66,28 @@ class LLMCodeAgent:
             print("End Agent")
             raise StopIteration
 
-        # {status: 'error' | 'success', content: str}
-        currentRes = self.cur_res()
+        try:
+            user_input = input("User: ")
+            if user_input.lower() in ["quit", "exit", "q"]:
+                print("Goodbye!")
+                raise StopIteration
 
-        # prompt
-        prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for this module. The content of the {exceptionType} is \"{exceptionContent}\".
-Here is the related in-line content with the {exceptionType}:
-
-{logContent}
-""".format(
-            **currentRes["content"]
-        )
-        print(f"what and why? {prompt}")
-
-        # query
-        print(self.invoke(prompt))
-
+            self.stream_graph_updates(user_input)
+        except:
+            # fallback if input() is not available
+            user_input = "What do you know about LangGraph?"
+            print("User: " + user_input)
+            self.stream_graph_updates(user_input)
+            raise StopIteration
 
         x = self.a
         self.a += 1
-        return (x, self.status)
+        return (x, "Nope")
+
+    def __iter__(self):
+        self.a = 1
+        self.status = "error"
+        return self
 
     def __call__(self):
         print("Start agent")
@@ -173,157 +98,3 @@ Here is the related in-line content with the {exceptionType}:
             print("iter status", currentStatus[1], ". iter times: ", currentStatus[0])
 
         print("last status", currentStatus[1], ". iter times: ", currentStatus[0])
-
-
-class CodeAgent:
-    def __init__(
-        self,
-        inputModulePath: str,
-        model="llama3-70b-8192",
-        humanRole="user",
-        assistantRole="assistant",
-    ):
-        self._llm = ChatGroq(
-            model=model,
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            # other params...
-        )
-        self._inputModulePath = inputModulePath
-        self._attempt = 5
-
-        self._history = []
-        initPrompts = CodeAgent.initPromptFromFile(inputModulePath)
-        self._history.extend(initPrompts)
-
-    @property
-    def prompt_template(self):
-        return ChatPromptTemplate(
-            [
-                ("system", self.system_prompt),
-                # Means the template will receive an optional list of messages under
-                # the "conversation" key
-                ("placeholder", "{conversation}"),
-                # Equivalently:
-                # MessagesPlaceholder(variable_name="conversation", optional=True)
-                ("user", "{user_input}"),
-            ]
-        )
-
-    def checker(self, code: str):
-        workFolderName = Template.TEMPORARYLLMWORKFOLDERNAME.value
-
-        result = subprocess.run(
-            [
-                "make",
-                # moduleWorkListLinting,
-                f"WORKDIR={workFolderName}",
-            ],
-            stdout=subprocess.PIPE,
-        )
-        print(
-            "Return code:", result.returncode, "\nmess:", result.stdout.decode("utf-8")
-        )
-        log = result.stdout.decode("utf-8")
-        return (LLMAgentStatus.SUCCESS.value, code)
-
-    @property
-    def status(self):
-        latestCode = self.latestCode
-        if len(latestCode):
-            return self.checker(latestCode)
-        return (LLMAgentStatus.INIT.value, "")
-
-    @property
-    def system_prompt(self):
-        return """Please act as a professional verilog designer.
-You will provide Verilog Code to A Verilog Compiler, called Verilator.
-Please provide single module or module compositions that can be contructed in a Verilog file."""
-
-    @property
-    def chain(self):
-        return self.prompt_template | self._llm
-
-    @property
-    def latestCode(self):
-        return self._history[-1] if isinstance(self._history[-1], str) else ""
-
-    def __call__(self):
-        # latestCode:str =
-        pass
-
-    @staticmethod
-    def defaultChain():
-        model = ChatGroq(
-            model="llama3-70b-8192",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            # other params...
-        )
-
-        defaultTemplate = ChatPromptTemplate(
-            [
-                (
-                    "system",
-                    """Please act as a professional verilog designer.
-Please provide single module or module compositions that can be contruct in a Verilog file.""",
-                ),
-                # Means the template will receive an optional list of messages under
-                # the "conversation" key
-                ("placeholder", "{conversation}"),
-                # Equivalently:
-                # MessagesPlaceholder(variable_name="conversation", optional=True)
-                ("user", "{user_input}"),
-            ]
-        )
-
-        prompt = defaultTemplate
-
-        chain = prompt | model
-        return chain
-
-    @staticmethod
-    def generate(
-        input: dict,
-        chain: RunnableSerializable[dict, BaseMessage] = None,
-        codeOnly=False,
-    ):
-        if chain == None:
-            chain = CodeAgent.defaultChain()
-
-        baseMessage = chain.invoke(input)
-
-        if codeOnly:
-            return CodeAgent.md_code_extract(baseMessage.content)
-
-        return baseMessage
-
-    @staticmethod
-    def initPromptFromFile(modulePath: str):
-        moduleName = os.path.basename(modulePath)
-        fileCodeWrapper = open(
-            os.path.join(modulePath, f"{ModuleNamePrefix.LLM.value}{moduleName}.v"), "r"
-        )
-        fileCode = fileCodeWrapper.read()
-        fileCodeWrapper.close()
-
-        designDescriptionWrapper = open(
-            os.path.join(modulePath, Template.DESCRIPTIONFILENAME.value), "r"
-        )
-        designDescriptionContent = designDescriptionWrapper.read()
-        designDescriptionWrapper.close()
-
-        return [HumanMessage(content=designDescriptionContent), fileCode]
-
-    @staticmethod
-    def md_code_extract(text: str) -> str:
-        found = re.search(r"^```(\w*)\n(?P<code>(.|\n)*)```", text, re.MULTILINE)
-        return (
-            found.groupdict()["code"]
-            if isinstance(found.groupdict()["code"], str)
-            else ""
-        )
