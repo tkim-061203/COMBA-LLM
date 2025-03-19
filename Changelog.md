@@ -5,6 +5,11 @@
 - Loop call
 - No iteration
 
+## Further
+
+- Compilation Structure for submodule of a complex module.
+- Another LLM for Stating the current module/submodule.
+
 ## 2.0.0
 
 - Speed up with Langraph
@@ -13,6 +18,10 @@
   - Only for looping.
 - Memory
 
+- Init: Chat with initial code.
+- Single module compilation only.
+- Prompt Template for the Code Fixer LLM.
+  - Json/dict format for the output
 # Purpose
 
 - Improve RTLLM

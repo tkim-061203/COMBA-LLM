@@ -6,7 +6,7 @@ module adder_8bit(
     output      cout
 );
 
-wire [7:0] c;
+wire [6:0] c;
 
 full_adder fa0(a[0], b[0], cin, sum[0], c[0]);
 full_adder fa1(a[1], b[1], c[0], sum[1], c[1]);
@@ -31,3 +31,4 @@ assign sum = a ^ b ^ cin;
 assign cout = (a & b) | (a & cin) | (b & cin);
 
 endmodule
+
