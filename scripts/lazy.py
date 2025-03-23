@@ -11,8 +11,8 @@ def modulePathToModuleWorkPath(path: str):
     )
 
 
-def getMainLLMFilenamePath(path: str, extension="v"):
-    filename = os.path.basename(path)
+def getMainLLMFilenamePath(path: str, extension="v", fname: str = None):
+    filename = os.path.basename(path) if fname == None else fname
 
     return os.path.join(path, f"{filename}.{extension}")
 

@@ -4,11 +4,27 @@
 
 - Loop call
 - No iteration
+- Refine based on exception only.
+- Initial generation is only at the start. No flow integration for the generator.
 
 ## Further
 
 - Compilation Structure for submodule of a complex module.
 - Another LLM for Stating the current module/submodule.
+- Aticulate waveform.vcd
+
+## 2.1.0
+
+- Change initial prompt.
+- Ignore EOFNEWLINE of Verilator
+- REGEX for case:
+
+```
+make: *** [.llmwork/adder_8bit/lint] Error 1
+compile: NO EXCEPTION NOW! ###Verilating for adder_8bit###
+%Error: Specified --top-module 'adder_8bit' was not found in design.
+%Error: Exiting due to 1 error(s)
+```
 
 ## 2.0.0
 
