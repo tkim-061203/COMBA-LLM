@@ -13,10 +13,9 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition) \
-    {                     \
-        if (!(condition)) \
-            exit(1);      \
+#define myexit(condition, content)   \
+    {                                \
+        assert(condition &&content); \
     }
 
 vluint64_t sim_time = 0;
@@ -25,17 +24,19 @@ vluint64_t tx_data_gen_time = 0;
 class adder_8bitInTx
 {
 public:
-    // TODO 1
+    /* TODO BEGIN 1 */
     u_int32_t a, b;
     u_int8_t cin;
+    /* TODO END 1 */
 };
 
 class adder_8bitOutTx
 {
 public:
-    // TODO 2
+    /* TODO BEGIN 2 */
     u_int32_t sum;
     u_int8_t cout;
+    /* TODO END 2 */
 };
 
 class adder_8bitScb
@@ -67,8 +68,20 @@ public:
         in = in_q.front();
         in_q.pop_front();
 
-        // TODO 3
-        myexit((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin)) delete in;
+        /* TODO BEGIN 3 */
+        if (!((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin)))
+        {
+            printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+            printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->cin = 0x%x", in->a, in->b, in->cin);
+            printf("\r\n# TODO 3 OUTPUT TRACE: tx->cout = 0x%x, tx->sum = 0x%x", tx->cout, tx->sum);
+
+            printf("\r\n");
+            fflush(stdout);
+
+            myexit((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin), "TODO 3 Failed")
+        }
+        /* TODO END 3 */
+        delete in;
         delete tx;
     }
 };
@@ -86,10 +99,11 @@ public:
 
     void drive(adder_8bitInTx *tx)
     {
-        // TODO 4
+        /* TODO BEGIN 4 */
         dut->a = tx->a;
         dut->b = tx->b;
         dut->cin = tx->cin;
+        /* TODO END 4 */
 
         delete tx;
         dut->eval();
@@ -112,10 +126,12 @@ public:
     {
         adder_8bitInTx *tx = new adder_8bitInTx();
 
-        // TODO 5
+        /* TODO BEGIN 5 */
         tx->a = dut->a;
         tx->b = dut->b;
         tx->cin = dut->cin;
+        /* TODO END 5 */
+
         scb->writeIn(tx);
     }
 };
@@ -136,9 +152,10 @@ public:
     {
         adder_8bitOutTx *tx = new adder_8bitOutTx();
 
-        // TODO 6
+        /* TODO BEGIN 6 */
         tx->sum = dut->sum;
         tx->cout = dut->cout;
+        /* TODO END 6 */
         scb->writeOut(tx);
     }
 };
@@ -147,12 +164,13 @@ adder_8bitInTx *rndAluInTx()
 {
     adder_8bitInTx *tx = new adder_8bitInTx();
 
-    // TODO 7
+    /* TODO BEGIN 7 */
     tx->a = rand() & 0xff;
     tx->b = rand() & 0xff;
     tx->cin = rand() & 0x1;
 
     tx_data_gen_time += 1;
+    /* TODO END 7 */
     return tx;
 }
 

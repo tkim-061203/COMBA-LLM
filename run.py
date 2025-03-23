@@ -283,41 +283,41 @@ def runFlow(
         if not os.path.isdir(moduleNameWorkPath):
             makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
 
-        moduleSourcePath = os.path.join(
-            moduleNormPath, f"{moduleNamePrefix}{moduleName}.v"
-        )
-        if (
-            workFolderName == Template.TEMPORARYLLMWORKFOLDERNAME.value
-            and moduleNamePrefix == ModuleNamePrefix.LLM.value
-        ):
-            moduleSourceFile = open(moduleSourcePath, "r+")
-            moduleSourceFileContent = moduleSourceFile.read()
-            moduleSourceFile.close()
-            if not moduleSourceFileContent:
-                while not generateYN["noall"]:
-                    choice = (
-                        input(
-                            "Empty LLM Verilog content. Do you want to generate LLM code? (y: yes, Y: yes all, n: no, N: no all): "
-                        )
-                        if not generateYN["yesall"]
-                        else "y"
-                    )
-                    if re.compile("^([yYnN])$").match(choice):
-                        # print('Your choice is correct', choice)
-                        match choice:
-                            case "Y":
-                                generateYN["yesall"] = True
-                                continue
-                            case "N":
-                                generateYN["noall"] = True
-                                continue
-                            case "y":
-                                generate([moduleNormPath])
-                                break
-                            case "n":
-                                break
-                    else:
-                        print("Your choice is incorrect", choice)
+        # moduleSourcePath = os.path.join(
+        #     moduleNormPath, f"{moduleNamePrefix}{moduleName}.v"
+        # )
+        # if (
+        #     workFolderName == Template.TEMPORARYLLMWORKFOLDERNAME.value
+        #     and moduleNamePrefix == ModuleNamePrefix.LLM.value
+        # ):
+        #     moduleSourceFile = open(moduleSourcePath, "r+")
+        #     moduleSourceFileContent = moduleSourceFile.read()
+        #     moduleSourceFile.close()
+        #     if not moduleSourceFileContent:
+        #         while not generateYN["noall"]:
+        #             choice = (
+        #                 input(
+        #                     "Empty LLM Verilog content. Do you want to generate LLM code? (y: yes, Y: yes all, n: no, N: no all): "
+        #                 )
+        #                 if not generateYN["yesall"]
+        #                 else "y"
+        #             )
+        #             if re.compile("^([yYnN])$").match(choice):
+        #                 # print('Your choice is correct', choice)
+        #                 match choice:
+        #                     case "Y":
+        #                         generateYN["yesall"] = True
+        #                         continue
+        #                     case "N":
+        #                         generateYN["noall"] = True
+        #                         continue
+        #                     case "y":
+        #                         generate([moduleNormPath])
+        #                         break
+        #                     case "n":
+        #                         break
+        #             else:
+        #                 print("Your choice is incorrect", choice)
 
         #
         print("flow here", moduleNormPath, moduleName)

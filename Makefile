@@ -15,7 +15,7 @@ define lintonly_verilating_template
 endef
 
 define binmake_template
-./${WORKDIR}/$(1)/obj_dir/V$(1): ./${WORKDIR}/$(1)/obj_dir/V$(1).h
+./${WORKDIR}/$(1)/obj_dir/V$(1): ./${WORKDIR}/$(1)/obj_dir/V$(1).h ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
 	@ echo "###Binary creation for $(1)###"
 	cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh make $$$$PWD -C obj_dir -f V$(1).mk V$(1)"
 endef
@@ -24,11 +24,17 @@ define run_template
 ./${WORKDIR}/$(1): ./${WORKDIR}/$(1)/obj_dir/V$(1)
 	@ echo "###Run Binary for $(1)###"
 	@ cd ${WORKDIR}/$(1) && ./obj_dir/V$(1) ; if [ $$$$? -eq 0 ]; then \
-		echo "\033[0;32m Teshbench $(1) PASS\e[0m"; \
+		echo "\033[0;32m ###DESLAPP TESTBENCH $(1) PASS\e[0m"; \
 	else \
-		echo "\033[0;31m Teshbench $(1) FAILED\e[0m"; \
+		echo "\033[0;31m ###DESLAPP TESTBENCH $(1) FAILED\e[0m"; \
 	fi
 endef
+
+define docker_run_template
+./${WORKDIR}/$(1)/docker_run:
+	@ bash -c "verilator_yosys.sh bash $$$$PWD -c \"./${WORKDIR}/$(1)/obj_dir/V$(1)\""
+endef
+
 # all:
 # 	@echo ${DESIGNS}
 # 	# @echo $(foreach design, $(DESIGNS), $(call verilating_template,$(design)))
@@ -42,3 +48,6 @@ $(foreach design, $(DESIGNS), $(eval $(call lintonly_verilating_template,$(desig
 
 .PHONY: $(patsubst %, ${WORKDIR}/%, $(DESIGNS))
 $(foreach design, $(DESIGNS), $(eval $(call run_template,$(design))))
+
+.PHONY: $(patsubst %, ${WORKDIR}/%/docker_run, $(DESIGNS))
+$(foreach design, $(DESIGNS), $(eval $(call docker_run_template,$(design))))
