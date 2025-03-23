@@ -78,7 +78,7 @@ public:
             printf("\r\n");
             fflush(stdout);
 
-            myexit((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin), "TODO 3 Failed")
+            myexit((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin), "TODO 3 Failed: Addition logic result is incorrect")
         }
         /* TODO END 3 */
         delete in;

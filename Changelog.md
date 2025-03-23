@@ -26,6 +26,8 @@ compile: NO EXCEPTION NOW! ###Verilating for adder_8bit###
 %Error: Exiting due to 1 error(s)
 ```
 
+- Ignore Verilator Warning: GENUNNAMED
+
 ## 2.0.0
 
 - Speed up with Langraph

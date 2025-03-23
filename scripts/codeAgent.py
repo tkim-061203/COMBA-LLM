@@ -43,6 +43,13 @@ defaultCodeFixerTemplate = ChatPromptTemplate(
 You are provided a Verilog Code with exceptions, such as Error or Warning from  A Verilog Compiler, called Verilator.
 You will fix Verilog code based on the excaption content.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
+
+For example:
+{{\"code\": \"module abc();
+endmodule
+\",
+\"description\": \"Any description ...\"}}
+
 """,
         ),
         # Means the template will receive an optional list of messages under
@@ -62,6 +69,13 @@ defaultCodeCorrecterTemplate = ChatPromptTemplate(
 You are provided a Verilog Code with no syntax error, but the Verilog code has functional failure due to testbench check.
 You will fix Verilog code based on the input/output traces of a formatted comment pair of the testbench code.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
+
+For example:
+{{\"code\": \"module abc();
+endmodule
+\",
+\"description\": \"Any description ...\"}}
+
 """,
         ),
         # Means the template will receive an optional list of messages under
@@ -113,7 +127,7 @@ class LLMCodeAgent:
         #
 
         # Base llm
-        self._llm = init_chat_model("llama3-8b-8192", model_provider="groq")
+        self._llm = init_chat_model("qwen-2.5-coder-32b", model_provider="groq")
 
         # LLM Code Fixer
         self._llm_code_fixer = self._llm.with_structured_output(
@@ -189,7 +203,7 @@ class LLMCodeAgent:
         # tb_failed = state["tb_failed"] if "tb_failed" in state else None
 
         # if exception != None and tb_failed != None and route_compile_yn == "y":
-        if self.no_exception_tb_failed(state=state) and route_compile_yn == "y":
+        if (not self.no_exception_tb_failed(state=state)) and route_compile_yn == "y":
             return "code_fixer"
         return END
 
@@ -213,8 +227,6 @@ class LLMCodeAgent:
             if len(founds) == 0:
                 founds = [{}]
                 break
-
-            print("founds[i]", founds[i])
 
             curSpan = founds[i]["span"][1] + 1
             nextSpan = founds[i + 1]["span"][0] - 1 if i != len(founds) - 1 else -1
@@ -247,6 +259,7 @@ class LLMCodeAgent:
         # cache current
         if "conversation" in state:
             if isinstance(state["conversation"][-1], AIMessage):
+                # if input("Save new code to file? (y/n): ") == 'y':
                 codeOutputDict = ast.literal_eval(state["conversation"][-1].content)
                 saveFileContent(curLLMCodeFilePath, codeOutputDict["code"])
 
@@ -316,6 +329,7 @@ Here is the related in-line content with the {exceptionType}:
 
         resultSTDOUTUTF8 = result.stdout.decode("utf8")
         tb_failed = self.testbench_failed(resultSTDOUTUTF8)
+        print("tb_failed", tb_failed)
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
 The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code.
@@ -341,12 +355,13 @@ Here are the content of the testbench code:
                         tb_code=tb_code
                     )
                 )
-            print(prompt)
+
             return {
                 "exception": None,
                 "tb_failed": tb_failed,
                 "user_input": prompt,
             }
+        print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
         return {"exception": None, "tb_failed": None}
 
     def testbench_failed(self, log: str):
@@ -368,10 +383,20 @@ Here are the content of the testbench code:
             ]
             inputTraceContent = ioTraceMatches[0]["traceContent"]
             outputTraceContent = ioTraceMatches[1]["traceContent"]
+
+            failureContentRegex = re.compile(
+                r"Assertion\s`.*\"TODO\s[0-9]*\sFailed:\s(?P<failureContent>.*)"
+            )
+            # failureContent = failureContentRegex.search(log).groupdict()[
+            #     "failureContent"
+            # ]
+            print("failureContentRegex", log, failureContentRegex.search(log))
+
             return {
                 "todoNum": todoNum,
                 "inputTrace": inputTraceContent,
                 "outputTrace": outputTraceContent,
+                # "failureContent": failureContent,
             }
         return {}
 
