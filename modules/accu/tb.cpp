@@ -5,7 +5,7 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <V{modulename}__Syms.h>
+#include <Vaccu__Syms.h>
 #include <assert.h>
 
 using namespace std;
@@ -14,185 +14,185 @@ using namespace std;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define myexit(condition, content)   \
-    {{                                \
+    {                                \
         assert(condition &&content); \
-    }}
+    }
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
 
-class {modulename}InTx
-{{
+class accuInTx
+{
 public:
     /* TODO BEGIN 1 */
-    myexit(0, "Delete me first before filling this TODO")
+    vluint8_t clk, rst_n, valid_in, data_in;
     /* TODO END 1 */
-}};
+};
 
-class {modulename}OutTx
-{{
+class accuOutTx
+{
 public:
     /* TODO BEGIN 2 */
-    myexit(0, "Delete me first before filling this TODO")
+    vluint8_t valid_out;
+    vluint16_t data_out;
     /* TODO END 2 */
-}};
+};
 
-class {modulename}Scb
-{{
+class accuScb
+{
 private:
-    std::deque<{modulename}InTx *> in_q;
+    std::deque<accuInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn({modulename}InTx *tx)
-    {{
+    void writeIn(accuInTx *tx)
+    {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
-    }}
+    }
 
     // Output interface monitor port
-    void writeOut({modulename}OutTx *tx)
-    {{
+    void writeOut(accuOutTx *tx)
+    {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
-        {{
-            std::cout << "Fatal Error in {modulename}Scb: empty {modulename}InTx queue" << std::endl;
+        {
+            std::cout << "Fatal Error in accuScb: empty accuInTx queue" << std::endl;
             exit(1);
-        }}
+        }
 
         // Grab the transaction item from the front of the input item queue
-        {modulename}InTx *in;
+        accuInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
         myexit(0, "Delete me first before filling this TODO")
-        /* TODO END 3 */
+            /* TODO END 3 */
 
-        delete in;
+            delete in;
         delete tx;
-    }}
-}};
+    }
+};
 
-class {modulename}InDrv
-{{
+class accuInDrv
+{
 private:
-    V{modulename} *dut;
+    Vaccu *dut;
 
 public:
-    {modulename}InDrv(V{modulename} *dut)
-    {{
+    accuInDrv(Vaccu *dut)
+    {
         this->dut = dut;
-    }}
+    }
 
-    void drive({modulename}InTx *tx)
-    {{
+    void drive(accuInTx *tx)
+    {
         /* TODO BEGIN 4 */
         myexit(0, "Delete me first before filling this TODO")
-        /* TODO END 4 */
-        
-        delete tx;
-        dut->eval();
-    }}
-}};
+            /* TODO END 4 */
 
-class {modulename}InMon
-{{
+            delete tx;
+        dut->eval();
+    }
+};
+
+class accuInMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vaccu *dut;
+    accuScb *scb;
 
 public:
-    {modulename}InMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    accuInMon(Vaccu *dut, accuScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}InTx *tx = new {modulename}InTx();
+    {
+        accuInTx *tx = new accuInTx();
 
         /* TODO BEGIN 5 */
         myexit(0, "Delete me first before filling this TODO")
-        /* TODO END 5 */
+            /* TODO END 5 */
 
-        scb->writeIn(tx);
-    }}
-}};
+            scb->writeIn(tx);
+    }
+};
 
-class {modulename}OutMon
-{{
+class accuOutMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vaccu *dut;
+    accuScb *scb;
 
 public:
-    {modulename}OutMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    accuOutMon(Vaccu *dut, accuScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}OutTx *tx = new {modulename}OutTx();
-        
+    {
+        accuOutTx *tx = new accuOutTx();
+
         /* TODO BEGIN 6 */
         myexit(0, "Delete me first before filling this TODO")
-        /* TODO END 6 */
+            /* TODO END 6 */
 
-        scb->writeOut(tx);
-    }}
-}};
+            scb->writeOut(tx);
+    }
+};
 
-{modulename}InTx *rndAluInTx()
-{{
-    {modulename}InTx *tx = new {modulename}InTx();
+accuInTx *rndAluInTx()
+{
+    accuInTx *tx = new accuInTx();
     /* TODO BEGIN 7 */
     if (IS_SIM_TIME_IN_RST(sim_time))
         tx->rst = 0;
-    
+
     myexit(0, "Delete me first before filling this TODO")
 
-    else
-    {{
+        else
+    {
         delete tx;
         return NULL;
-    }}
+    }
     /* TODO END 7 */
-    
+
     tx_data_gen_time += tx->rst;
     return tx;
-}}
+}
 
 int main(int argc, char **argv)
-{{
+{
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
-    V{modulename} *dut = new V{modulename};
+    Vaccu *dut = new Vaccu;
 
     Verilated::traceEverOn(true);
     VerilatedVcdC *m_trace = new VerilatedVcdC;
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    {modulename}InTx *tx;
+    accuInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    {modulename}InDrv *drv = new {modulename}InDrv(dut);
-    {modulename}Scb *scb = new {modulename}Scb();
-    {modulename}InMon *inMon = new {modulename}InMon(dut, scb);
-    {modulename}OutMon *outMon = new {modulename}OutMon(dut, scb);
+    accuInDrv *drv = new accuInDrv(dut);
+    accuScb *scb = new accuScb();
+    accuInMon *inMon = new accuInMon(dut, scb);
+    accuOutMon *outMon = new accuOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO")
-    while (sim_time < MAX_SIM_TIME)
-    {{
+    myexit(0, "Delete me first before filling this TODO") while (sim_time < MAX_SIM_TIME)
+    {
         dut->clk ^= 1;
 
         // Do all the driving/monitoring on a positive edge
         if ((dut->clk == 1 || IS_SIM_TIME_IN_RST(sim_time)) && sim_time)
-        {{
+        {
 
             tx = rndAluInTx();
             // Generate a randomised transaction item of type AluInTx
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
 
             // Monitor the output interface
             outMon->monitor();
-        }}
+        }
         else
             dut->eval();
 
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
 
         m_trace->dump(sim_time);
         sim_time++;
-    }}
+    }
     /* TODO END 8 */
     m_trace->close();
     delete dut;
@@ -225,4 +225,4 @@ int main(int argc, char **argv)
     delete drv;
     exit(EXIT_SUCCESS);
     return 0;
-}}
+}

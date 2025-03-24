@@ -114,95 +114,18 @@ def createmodule():
     else:
         print("\t- No override exist LLM-Generated Module Verilog!")
 
+    # category
     newCategoryPath = os.path.join(newModulePath, Template.CATEGORYFILENAME.value)
     if not os.path.isfile(newCategoryPath):
-        open(newCategoryPath, "w").close()
+        categoryName = input("Categories: ")
+        categoryFile = open(newCategoryPath, "w")
+        categoryFile.write(categoryName)
+        categoryFile.close()
+
+    else:
+        print("\t- No override exist category!")
 
     print(f"New module folder is created at {newModulePath}")
-
-
-def runLinting(
-    modulePaths: typing.List[str],
-    workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
-    moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
-    generateYN={"yesall": False, "noall": False},
-):
-    # makeverified(modules)
-    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
-
-    for moduleNormPath in moduleNormPaths:
-        moduleName = os.path.basename(moduleNormPath)
-        moduleNameWorkPath = os.path.join(workFolderName, moduleName)
-        if not os.path.isdir(moduleNameWorkPath):
-            makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
-
-        moduleSourcePath = os.path.join(
-            moduleNormPath, f"{moduleNamePrefix}{moduleName}.v"
-        )
-        if (
-            workFolderName == Template.TEMPORARYLLMWORKFOLDERNAME.value
-            and moduleNamePrefix == ModuleNamePrefix.LLM.value
-        ):
-            moduleSourceFile = open(moduleSourcePath, "r+")
-            moduleSourceFileContent = moduleSourceFile.read()
-            moduleSourceFile.close()
-            if not moduleSourceFileContent:
-                while not generateYN["noall"]:
-                    choice = (
-                        input(
-                            "Empty LLM Verilog content. Do you want to generate LLM code? (y: yes, Y: yes all, n: no, N: no all): "
-                        )
-                        if not generateYN["yesall"]
-                        else "y"
-                    )
-                    if re.compile("^([yYnN])$").match(choice):
-                        # print('Your choice is correct', choice)
-                        match choice:
-                            case "Y":
-                                generateYN["yesall"] = True
-                                continue
-                            case "N":
-                                generateYN["noall"] = True
-                                continue
-                            case "y":
-                                generate([moduleNormPath])
-                                break
-                            case "n":
-                                break
-                    else:
-                        print("Your choice is incorrect", choice)
-
-    # moduleWorkList = [re.sub(fr'^{Template.MODULEFOLDER.value}', workFolderName, moduleNormPath) for moduleNormPath in moduleNormPaths]
-
-    moduleList = [os.path.basename(module) for module in moduleNormPaths]
-
-    moduleWorkListLinting = "".join(
-        [os.path.join(workFolderName, module, "lint") for module in moduleList]
-    )
-    # print(moduleWorkListLinting)
-
-    result = subprocess.run(
-        [
-            "make",
-            moduleWorkListLinting,
-            f"WORKDIR={workFolderName}",
-        ],
-        stdout=subprocess.PIPE,
-    )
-    print("Return code:", result.returncode, "\nmess:", result.stdout.decode("utf-8"))
-    log = result.stdout.decode("utf-8")
-    if result.returncode == 2:  # error
-        for line in log.splitlines():
-            WarningRegex = re.compile(
-                r"%Warning-(?P<warningTitle>[A-Z]*):\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*):\s(?P<warningContent>.*)"
-            )
-            if WarningRegex.match(line):
-                warnExt: WarningExtraction = WarningRegex.search(line).groupdict()
-                print(warnExt)
-                print(
-                    f"The Verilator output a warning. The warning code is {warnExt['warningTitle']}, and its content is \"{warnExt['warningContent']}\""
-                )
-                break
 
 
 def makeWorkingFolder(
@@ -210,10 +133,12 @@ def makeWorkingFolder(
     workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
 ):
-    if os.path.isdir(workFolderName):
-        shutil.rmtree(workFolderName)
 
-    os.mkdir(workFolderName)
+    # if os.path.isdir(workFolderName):
+    #     shutil.rmtree(workFolderName)
+    if not os.path.isdir(workFolderName):
+        os.mkdir(workFolderName)
+
     for modulePath in modulePaths:
         moduleNormPath = os.path.normpath(modulePath)
         moduleName = os.path.basename(moduleNormPath)
@@ -222,6 +147,8 @@ def makeWorkingFolder(
 
         if not os.path.isdir(moduleNameWorkPath):
             os.mkdir(moduleNameWorkPath)
+        elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
+            shutil.rmtree(moduleNameWorkPath)
 
         tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
         tbModulePath = os.path.join(modulePath, tbModuleFileName)
@@ -272,7 +199,6 @@ def runFlow(
     modulePaths: typing.List[str],
     workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
-    generateYN={"yesall": False, "noall": False},
 ):
     # makeverified(modules)
     moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
@@ -283,57 +209,22 @@ def runFlow(
         if not os.path.isdir(moduleNameWorkPath):
             makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
 
-        # moduleSourcePath = os.path.join(
-        #     moduleNormPath, f"{moduleNamePrefix}{moduleName}.v"
-        # )
-        # if (
-        #     workFolderName == Template.TEMPORARYLLMWORKFOLDERNAME.value
-        #     and moduleNamePrefix == ModuleNamePrefix.LLM.value
-        # ):
-        #     moduleSourceFile = open(moduleSourcePath, "r+")
-        #     moduleSourceFileContent = moduleSourceFile.read()
-        #     moduleSourceFile.close()
-        #     if not moduleSourceFileContent:
-        #         while not generateYN["noall"]:
-        #             choice = (
-        #                 input(
-        #                     "Empty LLM Verilog content. Do you want to generate LLM code? (y: yes, Y: yes all, n: no, N: no all): "
-        #                 )
-        #                 if not generateYN["yesall"]
-        #                 else "y"
-        #             )
-        #             if re.compile("^([yYnN])$").match(choice):
-        #                 # print('Your choice is correct', choice)
-        #                 match choice:
-        #                     case "Y":
-        #                         generateYN["yesall"] = True
-        #                         continue
-        #                     case "N":
-        #                         generateYN["noall"] = True
-        #                         continue
-        #                     case "y":
-        #                         generate([moduleNormPath])
-        #                         break
-        #                     case "n":
-        #                         break
-        #             else:
-        #                 print("Your choice is incorrect", choice)
-
         #
         print("flow here", moduleNormPath, moduleName)
-        llmCodeAgent = LLMCodeAgent(modulePath=moduleNormPath)
+        llmCodeAgent = LLMCodeAgent(
+            modulePath=moduleNormPath,
+            workFolderName=workFolderName,
+            llm_model="gpt-4o-mini-2024-07-18",
+            model_provider="openai",
+            temperature=0,
+        )
         llmCodeAgent()
 
 
 match args.command:
     case Commands.CREATEMODULE.value:
         createmodule()
-    # case Commands.RUNVERIFIED.value:
-    #     runLinting(args.modules)
-    # case Commands.MAKEVERIFIED.value:
-    #     makeWorkingFolder(args.modules)
     case Commands.RUNWORK.value:
-        # runLinting(args.modules, *generateWorkFolderArgument(args.llm))
         runFlow(args.modules, *generateWorkFolderArgument(args.llm))
     case Commands.MAKEWORK.value:
         makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))

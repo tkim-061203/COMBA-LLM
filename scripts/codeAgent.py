@@ -13,12 +13,16 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import interrupt
 from .lazy import (
     readFileContent,
-    getMainLLMFilenamePath,
+    getTemplateFilenamePath,
     modulePathToModuleWorkPath,
     saveFileContent,
 )
 from .constants import Template
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables.config import RunnableConfig
+import datetime
+from operator import add
+from dotenv import load_dotenv
 
 # from pydantic import BaseModel, Field
 
@@ -41,8 +45,15 @@ defaultCodeFixerTemplate = ChatPromptTemplate(
             "system",
             """Please act as a professional verilog code fixer.
 You are provided a Verilog Code with exceptions, such as Error or Warning from  A Verilog Compiler, called Verilator.
-You will fix Verilog code based on the excaption content.
+You will fix Verilog code based on the exception content.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
+
+For example:
+{{\"code\": \"module abc();
+endmodule
+\",
+\"description\": \"Any description ...\"}}
+
 """,
         ),
         # Means the template will receive an optional list of messages under
@@ -62,6 +73,13 @@ defaultCodeCorrecterTemplate = ChatPromptTemplate(
 You are provided a Verilog Code with no syntax error, but the Verilog code has functional failure due to testbench check.
 You will fix Verilog code based on the input/output traces of a formatted comment pair of the testbench code.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
+
+For example:
+{{\"code\": \"module abc();
+endmodule
+\",
+\"description\": \"Any description ...\"}}
+
 """,
         ),
         # Means the template will receive an optional list of messages under
@@ -100,20 +118,34 @@ class State(TypedDict):
     # in the annotation defines how this state key should be updated
     # (in this case, it appends messages to the list, rather than overwriting them)
     conversation: Annotated[list, add_messages]
+    exceptionTitleAdditionContent: Annotated[list[str], add]
     user_input: str
     exception: Optional[dict]
     tb_failed: Optional[dict]
+    latest_code: Optional[str]
 
 
 class LLMCodeAgent:
-    def __init__(self, modulePath: str):
-        if not os.environ.get("GROQ_API_KEY"):
-            os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
+    def __init__(
+        self,
+        modulePath: str,
+        llm_model: str = "qwen-2.5-coder-32b",
+        workFolderName: str = Template.TEMPORARYLLMWORKFOLDERNAME.value,
+        model_provider: str = "groq",
+        **kwargs,
+    ):
+
+        load_dotenv()
+        # if not os.environ.get("GROQ_API_KEY"):
+        #     os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
 
         #
-
+        self._llm_model = llm_model
+        self._model_provider = model_provider
         # Base llm
-        self._llm = init_chat_model("llama3-8b-8192", model_provider="groq")
+        self._llm = init_chat_model(
+            llm_model, model_provider=self._model_provider, **kwargs
+        )
 
         # LLM Code Fixer
         self._llm_code_fixer = self._llm.with_structured_output(
@@ -155,47 +187,55 @@ class LLMCodeAgent:
         self._graph = graph_builder.compile(checkpointer=memory)
 
         #
-        # config
-        self._config = {"configurable": {"thread_id": "1"}}
-
-        #
         self._modulePath = modulePath
-        self._moduleWorkPath = modulePathToModuleWorkPath(self._modulePath)
+        self._workFolderName = workFolderName
+        self._moduleWorkPath = modulePathToModuleWorkPath(
+            self._modulePath, self._workFolderName
+        )
         self._modulePathLint = os.path.join(self._moduleWorkPath, "lint")
         self._modulePathDockerRun = os.path.join(self._moduleWorkPath, "docker_run")
-        self._workFolderName = Template.TEMPORARYLLMWORKFOLDERNAME.value
+
+        self._moduleName = os.path.basename(self._modulePath)
+        self._modulePathBinMake = os.path.join(
+            self._moduleWorkPath, f"obj_dir/V{self._moduleName}"
+        )
 
         self._last_print_type = None
+
+        #
+        # check Verilator Additional
+        self._verilator_warns = readFileContent("rag/verilator_warns.json")
+        self._verilator_warns: dict = ast.literal_eval(self._verilator_warns)
+
+    @property
+    def config(self):
+        myconfig: RunnableConfig = {
+            "configurable": {"thread_id": str(self._iteration_time)}
+        }
+        return myconfig
+
+    @property
+    def is_verified_flow(self):
+        if self._workFolderName == Template.TEMPORARYWORKFOLDERNAME.value:
+            return True
+        return False
 
     def route_compile(
         self,
         state: State,
     ):
-        # """
-        # Use in the conditional_edge to route to the ToolNode if the last message
-        # has tool calls. Otherwise, route to the end.
-        # """
-        # if isinstance(state, list):
-        #     ai_message = state[-1]
-        # elif messages := state.get("messages", []):
-        #     ai_message = messages[-1]
-        # else:
-        #     raise ValueError(f"No messages found in input state to tool_edge: {state}")
-        # if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        #     return "tools"
-        # return END
-        route_compile_yn = input("Route compile (y/n): ")
-        # exception = state["exception"] if "exception" in state else None
-        # tb_failed = state["tb_failed"] if "tb_failed" in state else None
 
-        # if exception != None and tb_failed != None and route_compile_yn == "y":
-        if self.no_exception_tb_failed(state=state) and route_compile_yn == "y":
+        route_compile_yn = (
+            "n" if self.is_verified_flow else input("Route compile (y/n): ")
+        )
+
+        if (not self.no_exception_tb_failed(state=state)) and route_compile_yn == "y":
             return "code_fixer"
         return END
 
     def warning_list(self, log: str, firstOnly=True):
         WarningRegex = re.compile(
-            r"%(?P<exceptionType>Warning|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
+            r"%(?P<exceptionType>Warning|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z0-9_]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
             re.MULTILINE,
         )
 
@@ -213,8 +253,6 @@ class LLMCodeAgent:
             if len(founds) == 0:
                 founds = [{}]
                 break
-
-            print("founds[i]", founds[i])
 
             curSpan = founds[i]["span"][1] + 1
             nextSpan = founds[i + 1]["span"][0] - 1 if i != len(founds) - 1 else -1
@@ -242,16 +280,17 @@ class LLMCodeAgent:
 
     def compile(self, state: State):
         # print("compile", state)
-        curLLMCodeFilePath = getMainLLMFilenamePath(self._moduleWorkPath)
+        curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
 
         # cache current
-        if "conversation" in state:
+        if "conversation" in state and (not self.is_verified_flow):
             if isinstance(state["conversation"][-1], AIMessage):
+                # if input("Save new code to file? (y/n): ") == 'y':
                 codeOutputDict = ast.literal_eval(state["conversation"][-1].content)
-                saveFileContent(curLLMCodeFilePath, codeOutputDict["code"])
+                saveFileContent(curCodeFilePath, codeOutputDict["code"])
 
         # current code save
-        self._curLLMCode = readFileContent(curLLMCodeFilePath)
+        self._curLLMCode = readFileContent(curCodeFilePath)
 
         # currentLLMFile = open(self._moduleWorkPath,'r+')
 
@@ -270,23 +309,71 @@ class LLMCodeAgent:
         # warning list
         firstWarning, *_ = self.warning_list(resultSTDOUTUTF8)
 
-        if len(firstWarning.keys()):
+        additionRetState = {
+            "tb_failed": {} if "tb_failed" not in state else state["tb_failed"]
+        }
+
+        if self.is_verified_flow and len(firstWarning.keys()):
+            print("Verified Code Warnings: ", resultSTDOUTUTF8)
+            return {
+                "exception": firstWarning,
+                "latest_code": self._curLLMCode,
+            } | additionRetState
+        elif len(firstWarning.keys()):
+            #
+            additionContent = {"exceptionTitleAdditionContent": ""}
+            # ask for addition of the warning and update warning description
+            if firstWarning["exceptionTitle"] not in self._verilator_warns:
+                print("firstWarning", firstWarning)
+                if (
+                    input(
+                        f'New addition content for Verilator warning "{firstWarning['exceptionTitle']}"? (y/n): '
+                    )
+                    == "y"
+                ):
+                    self._verilator_warns = readFileContent("rag/verilator_warns.json")
+                    self._verilator_warns: dict = ast.literal_eval(
+                        self._verilator_warns
+                    )
+
+            if (firstWarning["exceptionTitle"] in self._verilator_warns) and (
+                firstWarning["exceptionTitle"]
+                not in state["exceptionTitleAdditionContent"]
+            ):
+                additionContent[
+                    "exceptionTitleAdditionContent"
+                ] = f"""Here is description of the "{firstWarning['exceptionTitle']}":
+{self._verilator_warns[firstWarning['exceptionTitle']]}"""
+                additionRetState["exceptionTitleAdditionContent"] = [
+                    firstWarning["exceptionTitle"]
+                ]
+
             prompt = ""
             if firstWarning["exceptionType"] == "Warning":
                 prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-    Here is the related in-line content with the {exceptionType}:
+Here is the related in-line content with the {exceptionType}:
 
-    {logContent}
+{logContent}
+
+{exceptionTitleAdditionContent}
     """.format(
-                    **(firstWarning)
+                    **(firstWarning | additionContent)
+                )
+            elif firstWarning["lineException"] != None:  # error with line number
+                prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+Here is the related in-line content with the {exceptionType}:
+
+{logContent}
+
+{exceptionTitleAdditionContent}
+    """.format(
+                    **(firstWarning | additionContent)
                 )
             elif firstWarning["lineException"] == None:
                 prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 """.format(
                     **(firstWarning)
                 )
-                # if firstWarning["exceptionType"] == "Warning"
-                # elif firstWarning['lineException'] == None ""
             else:
                 prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 Here is the related in-line content with the {exceptionType}:
@@ -300,10 +387,15 @@ Here is the related in-line content with the {exceptionType}:
             return {
                 "exception": firstWarning,
                 "user_input": prompt,
-            }
+                "latest_code": self._curLLMCode,
+            } | additionRetState
         print("compile: NO EXCEPTION NOW!", resultSTDOUTUTF8)
 
         #
+        # tb check
+        if not self.tb_syntax_is_correct:
+            interrupt("TB Syntax is incorrect!")
+
         # testbench
         result = subprocess.run(
             [
@@ -316,9 +408,10 @@ Here is the related in-line content with the {exceptionType}:
 
         resultSTDOUTUTF8 = result.stdout.decode("utf8")
         tb_failed = self.testbench_failed(resultSTDOUTUTF8)
+        print("tb_failed", tb_failed)
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
-The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code.
+The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}"
 
 The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
@@ -326,9 +419,12 @@ The trace values of the outputs are: {outputTrace}
                 **tb_failed
             )
 
+            tb_failed_len = (
+                len(state["tb_failed"].keys()) if "tb_failed" in state else 0
+            )
             # memory for the tb code
-            if "tb_failed" not in state:
-                tb_codeFilePath = getMainLLMFilenamePath(
+            if ("tb_failed" not in state) or (tb_failed_len == 0):
+                tb_codeFilePath = getTemplateFilenamePath(
                     self._moduleWorkPath, "cpp", "tb"
                 )
                 tb_code = readFileContent(tb_codeFilePath)
@@ -341,13 +437,16 @@ Here are the content of the testbench code:
                         tb_code=tb_code
                     )
                 )
-            print(prompt)
+
             return {
                 "exception": None,
                 "tb_failed": tb_failed,
                 "user_input": prompt,
+                "latest_code": self._curLLMCode,
             }
-        return {"exception": None, "tb_failed": None}
+
+        print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
+        return {"exception": None, "tb_failed": None, "latest_code": self._curLLMCode}
 
     def testbench_failed(self, log: str):
 
@@ -368,10 +467,22 @@ Here are the content of the testbench code:
             ]
             inputTraceContent = ioTraceMatches[0]["traceContent"]
             outputTraceContent = ioTraceMatches[1]["traceContent"]
+
+            failureContentRegex = re.compile(
+                r"Assertion\s`.*\"TODO\s[0-9]*\sFailed:\s(?P<failureContent>.*)"
+            )
+            # failureContent = failureContentRegex.search(log).groupdict()[
+            #     "failureContent"
+            # ]
+            failureContent = failureContentRegex.search(log).groupdict()[
+                "failureContent"
+            ]
+
             return {
                 "todoNum": todoNum,
                 "inputTrace": inputTraceContent,
                 "outputTrace": outputTraceContent,
+                "failureContent": failureContent,
             }
         return {}
 
@@ -407,8 +518,8 @@ Here are the content of the testbench code:
                     }
                 )
                 break
-            except:
-                print("Chat bot trial:", i)
+            except Exception as e:
+                print("Chat bot trial:", i, e)
 
         # EOFNEWLINE: Missing newline at end of file (POSIX 3.206).
         if invokeResult["code"][-1] != "\n":
@@ -421,11 +532,37 @@ Here are the content of the testbench code:
             ]
         }
 
+    @property
+    def tb_syntax_is_correct(self):
+        # prepare for docker testbench
+        result = subprocess.run(
+            [
+                "make",
+                self._modulePathBinMake,
+                f"WORKDIR={self._workFolderName}",
+            ],
+            stdout=subprocess.PIPE,
+        )
+        resultSTDOUTUTF8 = result.stdout.decode("utf8")
+
+        tb_failed_regex = re.compile(
+            r"^make:\s*\*\*\*\s\[.*\]\sError\s[0-9]*", re.MULTILINE
+        )
+        tb_failed = True if tb_failed_regex.search(resultSTDOUTUTF8) != None else False
+
+        if tb_failed:
+            print("pre tb_failed", resultSTDOUTUTF8)
+            return False
+        return True
+
     def chatbot_code_generator(self, state: State):
 
-        if input("Generate new code? (y/n): ") == "n":
-            curLLMCodeFilePath = getMainLLMFilenamePath(self._moduleWorkPath)
-            code = readFileContent(curLLMCodeFilePath)
+        generate_new_code = (
+            "n" if self.is_verified_flow else input("Generate new code? (y/n): ")
+        )
+        if generate_new_code == "n":
+            curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
+            code = readFileContent(curCodeFilePath)
             content = {"code": code}
             return {
                 "conversation": [
@@ -461,51 +598,61 @@ Here are the content of the testbench code:
         }
 
     def stream_graph_updates(self, user_input: State):
-
         events = self._graph.stream(
             user_input,
-            self._config,
+            self.config,
             stream_mode="values",
         )
-        for event in events:
-            if (
-                "conversation" in event
-                and len(event["conversation"])
-                and self._last_print_type == type(HumanMessage)
-            ):
-                messagetype = type(event["conversation"][-1])
-                contentDict = ast.literal_eval(event["conversation"][-1].content)
-                code = contentDict["code"]
-                newMessage = messagetype(content=code)
-                newMessage.pretty_print()
-                self._last_print_type = messagetype
-            else:
-                HumanMessage(content=event["user_input"]).pretty_print()
-                self._last_print_type = type(HumanMessage)
+        try:
+            for event in events:
+                if (
+                    "conversation" in event
+                    and len(event["conversation"])
+                    and self._last_print_type == type(HumanMessage)
+                ):
+                    messagetype = type(event["conversation"][-1])
+                    contentDict = ast.literal_eval(event["conversation"][-1].content)
+                    code = contentDict["code"]
+                    newMessage = messagetype(content=code)
+                    newMessage.pretty_print()
+                    self._last_print_type = messagetype
+                else:
+                    HumanMessage(content=event["user_input"]).pretty_print()
+                    self._last_print_type = type(HumanMessage)
+        except:
+            pass
 
     def __next__(self):
-        confirm = input(f"Next? (y/n) ")
-        if confirm == "n" or confirm == "N":
-            print("End Agent")
+        confirm = input("##### Trial: " + str(self._iteration_time) + ". Next? (y/n) ")
+        if (confirm == "n" or confirm == "N") or (
+            self._iteration_time > self._iteration_time_limit
+        ):
+            print("End Agent with Iteration trial: ", self._iteration_time)
             raise StopIteration
-
-        # first generator
-        # generate first code
 
         # description
         description = readFileContent(
             os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value)
         )
 
-        # self.stream_graph_updates(self.compile({}))
         self.stream_graph_updates({"user_input": description})
-        # try:
-        # except:
-        #     raise StopIteration
 
-        x = self.a
-        self.a += 1
-        return (x, "Nope")
+        cur_graph_state: State = self._graph.get_state(self.config).values
+
+        exception = (
+            cur_graph_state["exception"] if "exception" in cur_graph_state else None
+        )
+        tb_failed = (
+            cur_graph_state["tb_failed"] if "tb_failed" in cur_graph_state else None
+        )
+        print("### Trial ", self._iteration_time, " results:")
+        print(
+            "\t\t- Trial ", self._iteration_time, " exception pass: ", exception == None
+        )
+        print("\t\t- Trial ", self._iteration_time, " tb pass: ", tb_failed == None)
+
+        self._iteration_time += 1
+        return cur_graph_state
 
     def pnggraph(self):
         try:
@@ -518,34 +665,80 @@ Here are the content of the testbench code:
         #
         # self._graph.update_state(self._config, {"exception": {"test": "ok"}})
 
-        self.a = 1
+        self._iteration_time = 0
+        self._iteration_time_limit = 4 if not self.is_verified_flow else 1
+
         self.status = "error"
         return self
 
     def __call__(self):
         print("Start agent")
         myiter = iter(self)
-        currentStatus = None
-
-        # code
-        # code = readFileContent(getMainLLMFilenamePath(self._moduleWorkPath))
-        # self._code = code
-
-        # self._graph.update_state(
-        #     self._config,
-        #     {
-        #         "conversation": [
-        #             HumanMessage(content=description),
-        #             AIMessage(content=f'{{"code": "{code}"}}, "description": ""}}'),
-        #             # CodeOuput(code=code, description=""),
-        #         ]
-        #     },
-        # )
 
         # generate first shoot
+        json_dumps_report = {
+            "llm_model": self._llm_model,
+            "history_trial": [],
+            "exception_trial": [],
+            "tb_failed_trial": [],
+            "code_trial": [],
+        }
 
-        for x in myiter:
-            currentStatus = x
-            print("iter status", currentStatus[1], ". iter times: ", currentStatus[0])
+        for iter_report in myiter:
+            exception = iter_report["exception"] if "exception" in iter_report else None
+            tb_failed = iter_report["tb_failed"] if "tb_failed" in iter_report else None
+            latest_code = (
+                iter_report["latest_code"] if "latest_code" in iter_report else None
+            )
+            json_dumps_report["history_trial"].append(
+                [
+                    {"role": message.type, "content": message.content}
+                    for message in iter_report["conversation"]
+                ]
+            )
+            json_dumps_report["exception_trial"].append(exception)
+            json_dumps_report["tb_failed_trial"].append(tb_failed)
+            json_dumps_report["code_trial"].append(latest_code)
 
-        print("last status", currentStatus[1], ". iter times: ", currentStatus[0])
+        if not self.is_verified_flow:
+            #
+            cur_report_path = os.path.join(self._modulePath, "reports")
+            if not os.path.isdir(cur_report_path):
+                os.mkdir(cur_report_path)
+            # save report.json
+            with open(
+                os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w+"
+            ) as outfile:
+                json.dump(json_dumps_report, outfile)
+
+            # save report history
+            history_tag = datetime.datetime.now().isoformat()
+            # history path
+            cur_history_path = os.path.join(self._modulePath, ".history")
+            if not os.path.isdir(cur_history_path):
+                os.mkdir(cur_history_path)
+            with open(
+                os.path.join(
+                    cur_history_path, f"report_{self._llm_model}_{history_tag}.json"
+                ),
+                "w+",
+            ) as outfile:
+                json.dump(json_dumps_report, outfile)
+
+        # count passes
+        count_excep_pass = sum(
+            [
+                1 if excep_pass == None else 0
+                for excep_pass in json_dumps_report["exception_trial"]
+            ]
+        )
+        count_tb_pass = sum(
+            [
+                1 if tb_pass == None else 0
+                for tb_pass in json_dumps_report["tb_failed_trial"]
+            ]
+        )
+
+        print("### Result iter times: ", self._iteration_time)
+        print("\t", f"{count_excep_pass}/5 Exception pass")
+        print("\t", f"{count_tb_pass}/5 TB pass")

@@ -2,16 +2,18 @@ from .constants import Template
 import os, re
 
 
-def modulePathToModuleWorkPath(path: str):
+def modulePathToModuleWorkPath(
+    path: str, workFolderName=Template.TEMPORARYLLMWORKFOLDERNAME.value
+):
 
     return re.sub(
         rf"^{Template.MODULEFOLDER.value}",
-        Template.TEMPORARYLLMWORKFOLDERNAME.value,
+        workFolderName,
         path,
     )
 
 
-def getMainLLMFilenamePath(path: str, extension="v", fname: str = None):
+def getTemplateFilenamePath(path: str, extension="v", fname: str = None):
     filename = os.path.basename(path) if fname == None else fname
 
     return os.path.join(path, f"{filename}.{extension}")
