@@ -19,6 +19,8 @@ from .lazy import (
 )
 from .constants import Template
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables.config import RunnableConfig
+import datetime
 
 # from pydantic import BaseModel, Field
 
@@ -117,17 +119,18 @@ class State(TypedDict):
     user_input: str
     exception: Optional[dict]
     tb_failed: Optional[dict]
+    latest_code: Optional[str]
 
 
 class LLMCodeAgent:
-    def __init__(self, modulePath: str):
+    def __init__(self, modulePath: str, llm_model="qwen-2.5-coder-32b"):
         if not os.environ.get("GROQ_API_KEY"):
             os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
 
         #
-
+        self._llm_model = llm_model
         # Base llm
-        self._llm = init_chat_model("qwen-2.5-coder-32b", model_provider="groq")
+        self._llm = init_chat_model(llm_model, model_provider="groq")
 
         # LLM Code Fixer
         self._llm_code_fixer = self._llm.with_structured_output(
@@ -169,10 +172,6 @@ class LLMCodeAgent:
         self._graph = graph_builder.compile(checkpointer=memory)
 
         #
-        # config
-        self._config = {"configurable": {"thread_id": "1"}}
-
-        #
         self._modulePath = modulePath
         self._moduleWorkPath = modulePathToModuleWorkPath(self._modulePath)
         self._modulePathLint = os.path.join(self._moduleWorkPath, "lint")
@@ -181,28 +180,19 @@ class LLMCodeAgent:
 
         self._last_print_type = None
 
+    @property
+    def config(self):
+        myconfig: RunnableConfig = {
+            "configurable": {"thread_id": str(self._iteration_time)}
+        }
+        return myconfig
+
     def route_compile(
         self,
         state: State,
     ):
-        # """
-        # Use in the conditional_edge to route to the ToolNode if the last message
-        # has tool calls. Otherwise, route to the end.
-        # """
-        # if isinstance(state, list):
-        #     ai_message = state[-1]
-        # elif messages := state.get("messages", []):
-        #     ai_message = messages[-1]
-        # else:
-        #     raise ValueError(f"No messages found in input state to tool_edge: {state}")
-        # if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        #     return "tools"
-        # return END
-        route_compile_yn = input("Route compile (y/n): ")
-        # exception = state["exception"] if "exception" in state else None
-        # tb_failed = state["tb_failed"] if "tb_failed" in state else None
 
-        # if exception != None and tb_failed != None and route_compile_yn == "y":
+        route_compile_yn = input("Route compile (y/n): ")
         if (not self.no_exception_tb_failed(state=state)) and route_compile_yn == "y":
             return "code_fixer"
         return END
@@ -313,6 +303,7 @@ Here is the related in-line content with the {exceptionType}:
             return {
                 "exception": firstWarning,
                 "user_input": prompt,
+                "latest_code": self._curLLMCode,
             }
         print("compile: NO EXCEPTION NOW!", resultSTDOUTUTF8)
 
@@ -356,13 +347,14 @@ Here are the content of the testbench code:
                     )
                 )
 
-            return {
-                "exception": None,
-                "tb_failed": tb_failed,
-                "user_input": prompt,
-            }
+                return {
+                    "exception": None,
+                    "tb_failed": tb_failed,
+                    "user_input": prompt,
+                    "latest_code": self._curLLMCode,
+                }
         print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
-        return {"exception": None, "tb_failed": None}
+        return {"exception": None, "tb_failed": None, "latest_code": self._curLLMCode}
 
     def testbench_failed(self, log: str):
 
@@ -486,51 +478,59 @@ Here are the content of the testbench code:
         }
 
     def stream_graph_updates(self, user_input: State):
-
         events = self._graph.stream(
             user_input,
-            self._config,
+            self.config,
             stream_mode="values",
         )
-        for event in events:
-            if (
-                "conversation" in event
-                and len(event["conversation"])
-                and self._last_print_type == type(HumanMessage)
-            ):
-                messagetype = type(event["conversation"][-1])
-                contentDict = ast.literal_eval(event["conversation"][-1].content)
-                code = contentDict["code"]
-                newMessage = messagetype(content=code)
-                newMessage.pretty_print()
-                self._last_print_type = messagetype
-            else:
-                HumanMessage(content=event["user_input"]).pretty_print()
-                self._last_print_type = type(HumanMessage)
+        try:
+            for event in events:
+                if (
+                    "conversation" in event
+                    and len(event["conversation"])
+                    and self._last_print_type == type(HumanMessage)
+                ):
+                    messagetype = type(event["conversation"][-1])
+                    contentDict = ast.literal_eval(event["conversation"][-1].content)
+                    code = contentDict["code"]
+                    newMessage = messagetype(content=code)
+                    newMessage.pretty_print()
+                    self._last_print_type = messagetype
+                else:
+                    HumanMessage(content=event["user_input"]).pretty_print()
+                    self._last_print_type = type(HumanMessage)
+        except:
+            pass
 
     def __next__(self):
-        confirm = input(f"Next? (y/n) ")
-        if confirm == "n" or confirm == "N":
-            print("End Agent")
+        confirm = input("##### Trial: " + str(self._iteration_time) + ". Next? (y/n) ")
+        if (confirm == "n" or confirm == "N") or (self._iteration_time > 4):
+            print("End Agent with Iteration trial: ", self._iteration_time)
             raise StopIteration
-
-        # first generator
-        # generate first code
 
         # description
         description = readFileContent(
             os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value)
         )
 
-        # self.stream_graph_updates(self.compile({}))
         self.stream_graph_updates({"user_input": description})
-        # try:
-        # except:
-        #     raise StopIteration
 
-        x = self.a
-        self.a += 1
-        return (x, "Nope")
+        cur_graph_state: State = self._graph.get_state(self.config).values
+
+        exception = (
+            cur_graph_state["exception"] if "exception" in cur_graph_state else None
+        )
+        tb_failed = (
+            cur_graph_state["tb_failed"] if "tb_failed" in cur_graph_state else None
+        )
+        print("### Trial ", self._iteration_time, " results:")
+        print(
+            "\t\t- Trial ", self._iteration_time, " exception pass: ", exception == None
+        )
+        print("\t\t- Trial ", self._iteration_time, " tb pass: ", tb_failed == None)
+
+        self._iteration_time += 1
+        return cur_graph_state
 
     def pnggraph(self):
         try:
@@ -543,34 +543,77 @@ Here are the content of the testbench code:
         #
         # self._graph.update_state(self._config, {"exception": {"test": "ok"}})
 
-        self.a = 1
+        self._iteration_time = 0
         self.status = "error"
         return self
 
     def __call__(self):
         print("Start agent")
         myiter = iter(self)
-        currentStatus = None
-
-        # code
-        # code = readFileContent(getMainLLMFilenamePath(self._moduleWorkPath))
-        # self._code = code
-
-        # self._graph.update_state(
-        #     self._config,
-        #     {
-        #         "conversation": [
-        #             HumanMessage(content=description),
-        #             AIMessage(content=f'{{"code": "{code}"}}, "description": ""}}'),
-        #             # CodeOuput(code=code, description=""),
-        #         ]
-        #     },
-        # )
 
         # generate first shoot
+        json_dumps_report = {
+            "llm_model": self._llm_model,
+            "history_trial": [],
+            "exception_trial": [],
+            "tb_failed_trial": [],
+            "code_trial": [],
+        }
 
-        for x in myiter:
-            currentStatus = x
-            print("iter status", currentStatus[1], ". iter times: ", currentStatus[0])
+        for iter_report in myiter:
+            exception = iter_report["exception"] if "exception" in iter_report else None
+            tb_failed = iter_report["tb_failed"] if "tb_failed" in iter_report else None
+            latest_code = (
+                iter_report["latest_code"] if "latest_code" in iter_report else None
+            )
+            json_dumps_report["history_trial"].append(
+                [
+                    {"role": message.type, "content": message.content}
+                    for message in iter_report["conversation"]
+                ]
+            )
+            json_dumps_report["exception_trial"].append(exception)
+            json_dumps_report["tb_failed_trial"].append(tb_failed)
+            json_dumps_report["code_trial"].append(latest_code)
 
-        print("last status", currentStatus[1], ". iter times: ", currentStatus[0])
+        #
+        cur_report_path = os.path.join(self._modulePath, "reports")
+        if not os.path.isdir(cur_report_path):
+            os.mkdir(cur_report_path)
+        # save report.json
+        with open(
+            os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w+"
+        ) as outfile:
+            json.dump(json_dumps_report, outfile)
+
+        # save report history
+        history_tag = datetime.datetime.now().isoformat()
+        # history path
+        cur_history_path = os.path.join(self._modulePath, ".history")
+        if not os.path.isdir(cur_history_path):
+            os.mkdir(cur_history_path)
+        with open(
+            os.path.join(
+                cur_history_path, f"report_{self._llm_model}_{history_tag}.json"
+            ),
+            "w+",
+        ) as outfile:
+            json.dump(json_dumps_report, outfile)
+
+        # count passes
+        count_excep_pass = sum(
+            [
+                1 if excep_pass == None else 0
+                for excep_pass in json_dumps_report["exception_trial"]
+            ]
+        )
+        count_tb_pass = sum(
+            [
+                1 if tb_pass == None else 0
+                for tb_pass in json_dumps_report["tb_failed_trial"]
+            ]
+        )
+
+        print("### Result iter times: ", self._iteration_time)
+        print("\t", f"{count_excep_pass}/5 Exception pass")
+        print("\t", f"{count_tb_pass}/5 TB pass")

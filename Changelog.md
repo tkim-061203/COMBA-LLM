@@ -6,12 +6,22 @@
 - No iteration
 - Refine based on exception only.
 - Initial generation is only at the start. No flow integration for the generator.
+- No self-planing method.
+- No PPA now
 
 ## Further
 
 - Compilation Structure for submodule of a complex module.
 - Another LLM for Stating the current module/submodule.
 - Aticulate waveform.vcd
+
+# 2.2.0
+
+- Report making, report folder for each module.
+  - Syntax and function checks' exports 
+
+- Finish:
+  - [x] adder_8bit
 
 ## 2.1.0
 

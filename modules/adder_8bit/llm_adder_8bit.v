@@ -6,8 +6,8 @@ module full_adder (
     output cout
 );
 
-assign sum = a ^ b ^ cin;
-assign cout = (a & b) | (cin & (a ^ b));
+    assign sum = a ^ b ^ cin;
+    assign cout = (a & b) | (cin & (a ^ b));
 
 endmodule
 
@@ -19,17 +19,17 @@ module adder_8bit (
     output cout
 );
 
-wire [7:0] carries;
+    wire [7:0] carry;
 
-assign carries[0] = cin;
+    full_adder fa0 (a[0], b[0], cin, sum[0], carry[0]);
+    full_adder fa1 (a[1], b[1], carry[0], sum[1], carry[1]);
+    full_adder fa2 (a[2], b[2], carry[1], sum[2], carry[2]);
+    full_adder fa3 (a[3], b[3], carry[2], sum[3], carry[3]);
+    full_adder fa4 (a[4], b[4], carry[3], sum[4], carry[4]);
+    full_adder fa5 (a[5], b[5], carry[4], sum[5], carry[5]);
+    full_adder fa6 (a[6], b[6], carry[5], sum[6], carry[6]);
+    full_adder fa7 (a[7], b[7], carry[6], sum[7], carry[7]);
 
-full_adder fa_0 (.a(a[0]), .b(b[0]), .cin(carries[0]), .sum(sum[0]), .cout(carries[1]));
-full_adder fa_1 (.a(a[1]), .b(b[1]), .cin(carries[1]), .sum(sum[1]), .cout(carries[2]));
-full_adder fa_2 (.a(a[2]), .b(b[2]), .cin(carries[2]), .sum(sum[2]), .cout(carries[3]));
-full_adder fa_3 (.a(a[3]), .b(b[3]), .cin(carries[3]), .sum(sum[3]), .cout(carries[4]));
-full_adder fa_4 (.a(a[4]), .b(b[4]), .cin(carries[4]), .sum(sum[4]), .cout(carries[5]));
-full_adder fa_5 (.a(a[5]), .b(b[5]), .cin(carries[5]), .sum(sum[5]), .cout(carries[6]));
-full_adder fa_6 (.a(a[6]), .b(b[6]), .cin(carries[6]), .sum(sum[6]), .cout(carries[7]));
-full_adder fa_7 (.a(a[7]), .b(b[7]), .cin(carries[7]), .sum(sum[7]), .cout(cout));
+    assign cout = carry[7];
 
 endmodule
