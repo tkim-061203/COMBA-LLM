@@ -15,13 +15,23 @@
 - Another LLM for Stating the current module/submodule.
 - Aticulate waveform.vcd
 
+## Notice
+
+- In case of the `adder_16bit`, the exist modules must be eliminated from the exist! To avoid errors!
+
 # 2.2.0
 
 - Report making, report folder for each module.
   - Syntax and function checks' exports 
+- `workFolderName` dependency for LLMAgent
+- Preparation for docker testbench
+- Prompting for Verilator Additional Warnings Content
 
 - Finish:
   - [x] adder_8bit
+
+- TB template change: 7 todo templates
+- Ignore PINCONNECTEMPTY, UNOPTFLAT of Verilator
 
 ## 2.1.0
 

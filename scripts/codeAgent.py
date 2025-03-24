@@ -13,7 +13,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import interrupt
 from .lazy import (
     readFileContent,
-    getMainLLMFilenamePath,
+    getTemplateFilenamePath,
     modulePathToModuleWorkPath,
     saveFileContent,
 )
@@ -21,6 +21,8 @@ from .constants import Template
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables.config import RunnableConfig
 import datetime
+from operator import add
+from dotenv import load_dotenv
 
 # from pydantic import BaseModel, Field
 
@@ -43,7 +45,7 @@ defaultCodeFixerTemplate = ChatPromptTemplate(
             "system",
             """Please act as a professional verilog code fixer.
 You are provided a Verilog Code with exceptions, such as Error or Warning from  A Verilog Compiler, called Verilator.
-You will fix Verilog code based on the excaption content.
+You will fix Verilog code based on the exception content.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
 
 For example:
@@ -116,6 +118,7 @@ class State(TypedDict):
     # in the annotation defines how this state key should be updated
     # (in this case, it appends messages to the list, rather than overwriting them)
     conversation: Annotated[list, add_messages]
+    exceptionTitleAdditionContent: Annotated[list[str], add]
     user_input: str
     exception: Optional[dict]
     tb_failed: Optional[dict]
@@ -123,14 +126,26 @@ class State(TypedDict):
 
 
 class LLMCodeAgent:
-    def __init__(self, modulePath: str, llm_model="qwen-2.5-coder-32b"):
-        if not os.environ.get("GROQ_API_KEY"):
-            os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
+    def __init__(
+        self,
+        modulePath: str,
+        llm_model: str = "qwen-2.5-coder-32b",
+        workFolderName: str = Template.TEMPORARYLLMWORKFOLDERNAME.value,
+        model_provider: str = "groq",
+        **kwargs,
+    ):
+
+        load_dotenv()
+        # if not os.environ.get("GROQ_API_KEY"):
+        #     os.environ["GROQ_API_KEY"] = getpass.getpass("Enter API key for Groq: ")
 
         #
         self._llm_model = llm_model
+        self._model_provider = model_provider
         # Base llm
-        self._llm = init_chat_model(llm_model, model_provider="groq")
+        self._llm = init_chat_model(
+            llm_model, model_provider=self._model_provider, **kwargs
+        )
 
         # LLM Code Fixer
         self._llm_code_fixer = self._llm.with_structured_output(
@@ -173,12 +188,24 @@ class LLMCodeAgent:
 
         #
         self._modulePath = modulePath
-        self._moduleWorkPath = modulePathToModuleWorkPath(self._modulePath)
+        self._workFolderName = workFolderName
+        self._moduleWorkPath = modulePathToModuleWorkPath(
+            self._modulePath, self._workFolderName
+        )
         self._modulePathLint = os.path.join(self._moduleWorkPath, "lint")
         self._modulePathDockerRun = os.path.join(self._moduleWorkPath, "docker_run")
-        self._workFolderName = Template.TEMPORARYLLMWORKFOLDERNAME.value
+
+        self._moduleName = os.path.basename(self._modulePath)
+        self._modulePathBinMake = os.path.join(
+            self._moduleWorkPath, f"obj_dir/V{self._moduleName}"
+        )
 
         self._last_print_type = None
+
+        #
+        # check Verilator Additional
+        self._verilator_warns = readFileContent("rag/verilator_warns.json")
+        self._verilator_warns: dict = ast.literal_eval(self._verilator_warns)
 
     @property
     def config(self):
@@ -187,19 +214,28 @@ class LLMCodeAgent:
         }
         return myconfig
 
+    @property
+    def is_verified_flow(self):
+        if self._workFolderName == Template.TEMPORARYWORKFOLDERNAME.value:
+            return True
+        return False
+
     def route_compile(
         self,
         state: State,
     ):
 
-        route_compile_yn = input("Route compile (y/n): ")
+        route_compile_yn = (
+            "n" if self.is_verified_flow else input("Route compile (y/n): ")
+        )
+
         if (not self.no_exception_tb_failed(state=state)) and route_compile_yn == "y":
             return "code_fixer"
         return END
 
     def warning_list(self, log: str, firstOnly=True):
         WarningRegex = re.compile(
-            r"%(?P<exceptionType>Warning|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
+            r"%(?P<exceptionType>Warning|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z0-9_]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
             re.MULTILINE,
         )
 
@@ -244,17 +280,17 @@ class LLMCodeAgent:
 
     def compile(self, state: State):
         # print("compile", state)
-        curLLMCodeFilePath = getMainLLMFilenamePath(self._moduleWorkPath)
+        curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
 
         # cache current
-        if "conversation" in state:
+        if "conversation" in state and (not self.is_verified_flow):
             if isinstance(state["conversation"][-1], AIMessage):
                 # if input("Save new code to file? (y/n): ") == 'y':
                 codeOutputDict = ast.literal_eval(state["conversation"][-1].content)
-                saveFileContent(curLLMCodeFilePath, codeOutputDict["code"])
+                saveFileContent(curCodeFilePath, codeOutputDict["code"])
 
         # current code save
-        self._curLLMCode = readFileContent(curLLMCodeFilePath)
+        self._curLLMCode = readFileContent(curCodeFilePath)
 
         # currentLLMFile = open(self._moduleWorkPath,'r+')
 
@@ -273,23 +309,71 @@ class LLMCodeAgent:
         # warning list
         firstWarning, *_ = self.warning_list(resultSTDOUTUTF8)
 
-        if len(firstWarning.keys()):
+        additionRetState = {
+            "tb_failed": {} if "tb_failed" not in state else state["tb_failed"]
+        }
+
+        if self.is_verified_flow and len(firstWarning.keys()):
+            print("Verified Code Warnings: ", resultSTDOUTUTF8)
+            return {
+                "exception": firstWarning,
+                "latest_code": self._curLLMCode,
+            } | additionRetState
+        elif len(firstWarning.keys()):
+            #
+            additionContent = {"exceptionTitleAdditionContent": ""}
+            # ask for addition of the warning and update warning description
+            if firstWarning["exceptionTitle"] not in self._verilator_warns:
+                print("firstWarning", firstWarning)
+                if (
+                    input(
+                        f'New addition content for Verilator warning "{firstWarning['exceptionTitle']}"? (y/n): '
+                    )
+                    == "y"
+                ):
+                    self._verilator_warns = readFileContent("rag/verilator_warns.json")
+                    self._verilator_warns: dict = ast.literal_eval(
+                        self._verilator_warns
+                    )
+
+            if (firstWarning["exceptionTitle"] in self._verilator_warns) and (
+                firstWarning["exceptionTitle"]
+                not in state["exceptionTitleAdditionContent"]
+            ):
+                additionContent[
+                    "exceptionTitleAdditionContent"
+                ] = f"""Here is description of the "{firstWarning['exceptionTitle']}":
+{self._verilator_warns[firstWarning['exceptionTitle']]}"""
+                additionRetState["exceptionTitleAdditionContent"] = [
+                    firstWarning["exceptionTitle"]
+                ]
+
             prompt = ""
             if firstWarning["exceptionType"] == "Warning":
                 prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-    Here is the related in-line content with the {exceptionType}:
+Here is the related in-line content with the {exceptionType}:
 
-    {logContent}
+{logContent}
+
+{exceptionTitleAdditionContent}
     """.format(
-                    **(firstWarning)
+                    **(firstWarning | additionContent)
+                )
+            elif firstWarning["lineException"] != None:  # error with line number
+                prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+Here is the related in-line content with the {exceptionType}:
+
+{logContent}
+
+{exceptionTitleAdditionContent}
+    """.format(
+                    **(firstWarning | additionContent)
                 )
             elif firstWarning["lineException"] == None:
                 prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 """.format(
                     **(firstWarning)
                 )
-                # if firstWarning["exceptionType"] == "Warning"
-                # elif firstWarning['lineException'] == None ""
             else:
                 prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 Here is the related in-line content with the {exceptionType}:
@@ -304,10 +388,14 @@ Here is the related in-line content with the {exceptionType}:
                 "exception": firstWarning,
                 "user_input": prompt,
                 "latest_code": self._curLLMCode,
-            }
+            } | additionRetState
         print("compile: NO EXCEPTION NOW!", resultSTDOUTUTF8)
 
         #
+        # tb check
+        if not self.tb_syntax_is_correct:
+            interrupt("TB Syntax is incorrect!")
+
         # testbench
         result = subprocess.run(
             [
@@ -323,7 +411,7 @@ Here is the related in-line content with the {exceptionType}:
         print("tb_failed", tb_failed)
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
-The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code.
+The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}"
 
 The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
@@ -331,9 +419,12 @@ The trace values of the outputs are: {outputTrace}
                 **tb_failed
             )
 
+            tb_failed_len = (
+                len(state["tb_failed"].keys()) if "tb_failed" in state else 0
+            )
             # memory for the tb code
-            if "tb_failed" not in state:
-                tb_codeFilePath = getMainLLMFilenamePath(
+            if ("tb_failed" not in state) or (tb_failed_len == 0):
+                tb_codeFilePath = getTemplateFilenamePath(
                     self._moduleWorkPath, "cpp", "tb"
                 )
                 tb_code = readFileContent(tb_codeFilePath)
@@ -347,12 +438,13 @@ Here are the content of the testbench code:
                     )
                 )
 
-                return {
-                    "exception": None,
-                    "tb_failed": tb_failed,
-                    "user_input": prompt,
-                    "latest_code": self._curLLMCode,
-                }
+            return {
+                "exception": None,
+                "tb_failed": tb_failed,
+                "user_input": prompt,
+                "latest_code": self._curLLMCode,
+            }
+
         print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
         return {"exception": None, "tb_failed": None, "latest_code": self._curLLMCode}
 
@@ -382,13 +474,15 @@ Here are the content of the testbench code:
             # failureContent = failureContentRegex.search(log).groupdict()[
             #     "failureContent"
             # ]
-            print("failureContentRegex", log, failureContentRegex.search(log))
+            failureContent = failureContentRegex.search(log).groupdict()[
+                "failureContent"
+            ]
 
             return {
                 "todoNum": todoNum,
                 "inputTrace": inputTraceContent,
                 "outputTrace": outputTraceContent,
-                # "failureContent": failureContent,
+                "failureContent": failureContent,
             }
         return {}
 
@@ -424,8 +518,8 @@ Here are the content of the testbench code:
                     }
                 )
                 break
-            except:
-                print("Chat bot trial:", i)
+            except Exception as e:
+                print("Chat bot trial:", i, e)
 
         # EOFNEWLINE: Missing newline at end of file (POSIX 3.206).
         if invokeResult["code"][-1] != "\n":
@@ -438,11 +532,37 @@ Here are the content of the testbench code:
             ]
         }
 
+    @property
+    def tb_syntax_is_correct(self):
+        # prepare for docker testbench
+        result = subprocess.run(
+            [
+                "make",
+                self._modulePathBinMake,
+                f"WORKDIR={self._workFolderName}",
+            ],
+            stdout=subprocess.PIPE,
+        )
+        resultSTDOUTUTF8 = result.stdout.decode("utf8")
+
+        tb_failed_regex = re.compile(
+            r"^make:\s*\*\*\*\s\[.*\]\sError\s[0-9]*", re.MULTILINE
+        )
+        tb_failed = True if tb_failed_regex.search(resultSTDOUTUTF8) != None else False
+
+        if tb_failed:
+            print("pre tb_failed", resultSTDOUTUTF8)
+            return False
+        return True
+
     def chatbot_code_generator(self, state: State):
 
-        if input("Generate new code? (y/n): ") == "n":
-            curLLMCodeFilePath = getMainLLMFilenamePath(self._moduleWorkPath)
-            code = readFileContent(curLLMCodeFilePath)
+        generate_new_code = (
+            "n" if self.is_verified_flow else input("Generate new code? (y/n): ")
+        )
+        if generate_new_code == "n":
+            curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
+            code = readFileContent(curCodeFilePath)
             content = {"code": code}
             return {
                 "conversation": [
@@ -504,7 +624,9 @@ Here are the content of the testbench code:
 
     def __next__(self):
         confirm = input("##### Trial: " + str(self._iteration_time) + ". Next? (y/n) ")
-        if (confirm == "n" or confirm == "N") or (self._iteration_time > 4):
+        if (confirm == "n" or confirm == "N") or (
+            self._iteration_time > self._iteration_time_limit
+        ):
             print("End Agent with Iteration trial: ", self._iteration_time)
             raise StopIteration
 
@@ -544,6 +666,8 @@ Here are the content of the testbench code:
         # self._graph.update_state(self._config, {"exception": {"test": "ok"}})
 
         self._iteration_time = 0
+        self._iteration_time_limit = 4 if not self.is_verified_flow else 1
+
         self.status = "error"
         return self
 
@@ -576,29 +700,30 @@ Here are the content of the testbench code:
             json_dumps_report["tb_failed_trial"].append(tb_failed)
             json_dumps_report["code_trial"].append(latest_code)
 
-        #
-        cur_report_path = os.path.join(self._modulePath, "reports")
-        if not os.path.isdir(cur_report_path):
-            os.mkdir(cur_report_path)
-        # save report.json
-        with open(
-            os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w+"
-        ) as outfile:
-            json.dump(json_dumps_report, outfile)
+        if not self.is_verified_flow:
+            #
+            cur_report_path = os.path.join(self._modulePath, "reports")
+            if not os.path.isdir(cur_report_path):
+                os.mkdir(cur_report_path)
+            # save report.json
+            with open(
+                os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w+"
+            ) as outfile:
+                json.dump(json_dumps_report, outfile)
 
-        # save report history
-        history_tag = datetime.datetime.now().isoformat()
-        # history path
-        cur_history_path = os.path.join(self._modulePath, ".history")
-        if not os.path.isdir(cur_history_path):
-            os.mkdir(cur_history_path)
-        with open(
-            os.path.join(
-                cur_history_path, f"report_{self._llm_model}_{history_tag}.json"
-            ),
-            "w+",
-        ) as outfile:
-            json.dump(json_dumps_report, outfile)
+            # save report history
+            history_tag = datetime.datetime.now().isoformat()
+            # history path
+            cur_history_path = os.path.join(self._modulePath, ".history")
+            if not os.path.isdir(cur_history_path):
+                os.mkdir(cur_history_path)
+            with open(
+                os.path.join(
+                    cur_history_path, f"report_{self._llm_model}_{history_tag}.json"
+                ),
+                "w+",
+            ) as outfile:
+                json.dump(json_dumps_report, outfile)
 
         # count passes
         count_excep_pass = sum(

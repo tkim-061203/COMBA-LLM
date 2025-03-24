@@ -1,7 +1,7 @@
 DEFINES?=
 WORKDIR?=.work
 DESIGNS=$(patsubst ./${WORKDIR}/%, %, $(shell find ./${WORKDIR} -maxdepth 1 -mindepth 1 -type d))
-VERILATOR_WNO=ENUMVALUE DECLFILENAME GENUNNAMED
+VERILATOR_WNO=ENUMVALUE DECLFILENAME GENUNNAMED PINCONNECTEMPTY UNOPTFLAT
 
 define verilating_template
 ./${WORKDIR}/$(1)/obj_dir/V$(1).h: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
