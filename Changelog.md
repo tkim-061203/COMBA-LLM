@@ -32,6 +32,7 @@
 
 - TB template change: 7 todo templates
 - Ignore PINCONNECTEMPTY, UNOPTFLAT of Verilator
+- Ignore all warning
 
 ## 2.1.0
 

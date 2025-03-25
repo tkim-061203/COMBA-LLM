@@ -25,7 +25,7 @@ class accuInTx
 {
 public:
     /* TODO BEGIN 1 */
-    vluint8_t clk, rst_n, valid_in, data_in;
+    uint8_t clk, rst_n, valid_in, data_in;
     /* TODO END 1 */
 };
 
@@ -33,8 +33,8 @@ class accuOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    vluint8_t valid_out;
-    vluint16_t data_out;
+    uint8_t valid_out;
+    uint16_t data_out;
     /* TODO END 2 */
 };
 
@@ -68,10 +68,29 @@ public:
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        myexit(0, "Delete me first before filling this TODO")
-            /* TODO END 3 */
+        switch (in->rst_n)
+        {
+        case 0:
+            if (!(tx->data_out == 0 && tx->valid_out == 0))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->data_in = 0x%x, in->valid_in = 0x%x", in->rst_n, in->data_in, in->valid_in);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
 
-            delete in;
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->data_out == 0 && tx->valid_out == 0, "TODO 3 Failed: Reset output logic result of the Verilog module is incorrect")
+            }
+            break;
+
+        default:
+            break;
+        }
+
+        /* TODO END 3 */
+
+        delete in;
         delete tx;
     }
 };

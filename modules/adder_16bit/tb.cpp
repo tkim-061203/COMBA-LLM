@@ -69,7 +69,7 @@ public:
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (!((tx->y | (tx->Co << 8)) == (in->a + in->b + in->Cin)))
+        if (!((tx->y | (tx->Co << 16)) == (in->a + in->b + in->Cin)))
         {
             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
             printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->Cin = 0x%x", in->a, in->b, in->Cin);
@@ -78,7 +78,7 @@ public:
             printf("\r\n");
             fflush(stdout);
 
-            myexit((tx->y | (tx->Co << 8)) == (in->a + in->b + in->Cin), "TODO 3 Failed: Addition logic result is incorrect")
+            myexit((tx->y | (tx->Co << 16)) == (in->a + in->b + in->Cin), "TODO 3 Failed: Addition logic result is incorrect")
         }
         /* TODO END 3 */
 

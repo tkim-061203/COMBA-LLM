@@ -68,7 +68,7 @@ public:
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (!((tx->S | (tx->C32 << 8)) == (in->A + in->B)))
+        if (!((tx->S | (tx->C32 << 32)) == (in->A + in->B)))
         {
             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
             printf("\r\n# TODO 3 INPUT TRACE: in->A = 0x%x, in->B = 0x%x", in->A, in->B);
@@ -77,7 +77,7 @@ public:
             printf("\r\n");
             fflush(stdout);
 
-            myexit((tx->S | (tx->C32 << 8)) == (in->A + in->B), "TODO 3 Failed: Addition logic result of the Verilog module is incorrect")
+            myexit((tx->S | (tx->C32 << 32)) == (in->A + in->B), "TODO 3 Failed: Addition logic result of the Verilog module is incorrect")
         }
         /* TODO END 3 */
 
