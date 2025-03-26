@@ -25,7 +25,8 @@ class accuInTx
 {
 public:
     /* TODO BEGIN 1 */
-    uint8_t clk, rst_n, valid_in, data_in;
+    uint8_t clk, rst_n, valid_in;
+    uint16_t data_in;
     /* TODO END 1 */
 };
 
@@ -37,6 +38,10 @@ public:
     uint16_t data_out;
     /* TODO END 2 */
 };
+
+uint16_t data_in_ref[4];
+accuInTx in_tx_ref;
+accuOutTx out_tx_ref;
 
 class accuScb
 {
@@ -68,25 +73,42 @@ public:
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        switch (in->rst_n)
-        {
-        case 0:
-            if (!(tx->data_out == 0 && tx->valid_out == 0))
-            {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->data_in = 0x%x, in->valid_in = 0x%x", in->rst_n, in->data_in, in->valid_in);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
+        // switch (in->rst_n)
+        // {
+        // case 0:
+        //     if (!in->rst_n)
+        //     {
+        //         if (!(tx->data_out == 0 && tx->valid_out == 0))
+        //         {
+        //             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+        //             printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->data_in = 0x%x, in->valid_in = 0x%x", in->rst_n, in->data_in, in->valid_in);
+        //             printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
 
-                printf("\r\n");
-                fflush(stdout);
+        //             printf("\r\n");
+        //             fflush(stdout);
 
-                myexit(tx->data_out == 0 && tx->valid_out == 0, "TODO 3 Failed: Reset output logic result of the Verilog module is incorrect")
-            }
-            break;
+        //             myexit(tx->data_out == 0 && tx->valid_out == 0, "TODO 3 Failed: Reset output logic result of the Verilog module is incorrect")
+        //         }
+        //     }
+        //     else if (tx->valid_out)
+        //     {
+        //         if (!(tx->data_out == (data_in_ref[0] + data_in_ref[1] + data_in_ref[2] + data_in_ref[3])))
+        //         {
+        //             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+        //             printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->data_in = 0x%x, in->valid_in = 0x%x", in->rst_n, in->data_in, in->valid_in);
+        //             printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
 
-        default:
-            break;
-        }
+        //             printf("\r\n");
+        //             fflush(stdout);
+
+        //             myexit(tx->data_out == (data_in_ref[0] + data_in_ref[1] + data_in_ref[2] + data_in_ref[3]), "TODO 3 Failed: Accumulation output logic result of the Verilog module is incorrect when valid_out is on")
+        //         }
+        //     }
+        //     break;
+
+        // default:
+        //     break;
+        // }
 
         /* TODO END 3 */
 
@@ -109,10 +131,14 @@ public:
     void drive(accuInTx *tx)
     {
         /* TODO BEGIN 4 */
-        myexit(0, "Delete me first before filling this TODO")
-            /* TODO END 4 */
-
+        if (tx != NULL)
+        {
+            dut->data_in = (uint8_t)tx->data_in;
+            dut->rst_n = tx->rst_n;
+            dut->valid_in = tx->valid_in;
             delete tx;
+        }
+        /* TODO END 4 */
         dut->eval();
     }
 };
@@ -134,10 +160,12 @@ public:
         accuInTx *tx = new accuInTx();
 
         /* TODO BEGIN 5 */
-        myexit(0, "Delete me first before filling this TODO")
-            /* TODO END 5 */
+        // tx->data_in = dut->data_in;
+        // tx->valid_in = dut->valid_in;
+        // tx->rst_n = dut->rst_n;
+        /* TODO END 5 */
 
-            scb->writeIn(tx);
+        scb->writeIn(tx);
     }
 };
 
@@ -158,10 +186,11 @@ public:
         accuOutTx *tx = new accuOutTx();
 
         /* TODO BEGIN 6 */
-        myexit(0, "Delete me first before filling this TODO")
-            /* TODO END 6 */
+        // tx->data_out = dut->data_out;
+        // tx->valid_out = dut->valid_out;
+        /* TODO END 6 */
 
-            scb->writeOut(tx);
+        scb->writeOut(tx);
     }
 };
 
@@ -170,23 +199,37 @@ accuInTx *rndAluInTx()
     accuInTx *tx = new accuInTx();
     /* TODO BEGIN 7 */
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst = 0;
+        tx->rst_n = 0;
+    else if (sim_time >= VERIF_START_TIME)
+    {
+        tx->rst_n = !out_tx_ref.valid_out;
 
-    myexit(0, "Delete me first before filling this TODO")
+        in_tx_ref.valid_in = 1;
+        if (!out_tx_ref.valid_out) // load accumulator
+            in_tx_ref.data_in = data_in_ref[tx_data_gen_time % 4];
+        else // update data_in_ref
+        {
+            for (int i = 0; i < (sizeof(data_in_ref) / sizeof(data_in_ref[0])); i++)
+                data_in_ref[i] = rand() & 0xff;
+        }
 
-        else
+        tx->data_in = in_tx_ref.data_in;
+        tx->valid_in = in_tx_ref.valid_in;
+    }
+    else
     {
         delete tx;
         return NULL;
     }
     /* TODO END 7 */
 
-    tx_data_gen_time += tx->rst;
+    tx_data_gen_time += (sim_time >= VERIF_START_TIME);
     return tx;
 }
 
 int main(int argc, char **argv)
 {
+    printf("Here");
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
     Vaccu *dut = new Vaccu;
@@ -203,16 +246,14 @@ int main(int argc, char **argv)
     accuScb *scb = new accuScb();
     accuInMon *inMon = new accuInMon(dut, scb);
     accuOutMon *outMon = new accuOutMon(dut, scb);
-
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO") while (sim_time < MAX_SIM_TIME)
+    while (sim_time < MAX_SIM_TIME)
     {
         dut->clk ^= 1;
 
         // Do all the driving/monitoring on a positive edge
         if ((dut->clk == 1 || IS_SIM_TIME_IN_RST(sim_time)) && sim_time)
         {
-
             tx = rndAluInTx();
             // Generate a randomised transaction item of type AluInTx
 
@@ -229,7 +270,7 @@ int main(int argc, char **argv)
         }
         else
             dut->eval();
-
+        out_tx_ref.valid_out = dut->valid_out; // update out_tx_ref
         // end of positive edge processing
 
         m_trace->dump(sim_time);

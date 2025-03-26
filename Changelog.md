@@ -32,7 +32,7 @@
 
 - TB template change: 7 todo templates
 - Ignore PINCONNECTEMPTY, UNOPTFLAT of Verilator
-- Ignore all warning
+- Ignore all warning: Wno-fatal
 
 ## 2.1.0
 

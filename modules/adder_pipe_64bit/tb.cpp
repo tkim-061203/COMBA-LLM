@@ -31,7 +31,7 @@ public:
     __uint128_t adda, addb;
     /* TODO END 1 */
 };
-adder_pipe_64bitInTx tx_ref;
+adder_pipe_64bitInTx in_tx_ref;
 
 class adder_pipe_64bitOutTx
 {
@@ -41,6 +41,7 @@ public:
     __uint128_t result;
     /* TODO END 2 */
 };
+adder_pipe_64bitOutTx out_tx_ref;
 
 class adder_pipe_64bitScb
 {
@@ -83,7 +84,7 @@ public:
                 printf("\r\n");
                 fflush(stdout);
 
-                // myexit(tx->result == 0 && tx->o_en == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(tx->result == 0 && tx->o_en == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect when (o_en) is asserted")
             }
         }
         else if (tx->o_en)
@@ -96,7 +97,7 @@ public:
                 printf("\r\n");
                 fflush(stdout);
 
-                // myexit(tx->result == (in->adda + in->addb), "TODO 3 Failed: Addition logic result of the Verilog module is incorrect")
+                myexit(tx->result == (in->adda + in->addb), "TODO 3 Failed: Addition logic result of the Verilog module is incorrect when (o_en) is asserted")
             }
         /* TODO END 3 */
 
@@ -193,25 +194,18 @@ adder_pipe_64bitInTx *rndAluInTx()
         tx->rst_n = 0;
     else if (sim_time > VERIF_START_TIME)
     {
-        tx->rst_n = 1;
+        tx->rst_n = !out_tx_ref.o_en; // reset if last out_tx_ref.o_en is on
+        in_tx_ref.i_en = 1;
 
-        uint64_t verif_start_time_offset = (sim_time - VERIF_START_TIME - 1) % 12;
-        switch (verif_start_time_offset)
+        if (out_tx_ref.o_en) // random new input data
         {
-        case 0: // i_en and update input
-            tx_ref.i_en = 1;
-            tx_ref.adda = (((uint64_t)rand()) << 32) | rand();
-            tx_ref.addb = (((uint64_t)rand()) << 32) | rand();
-            break;
-
-        default:
-            tx_ref.i_en = 0;
-            break;
+            in_tx_ref.adda = (((uint64_t)rand()) << 32) | rand();
+            in_tx_ref.addb = (((uint64_t)rand()) << 32) | rand();
         }
 
-        tx->i_en = tx_ref.i_en;
-        tx->adda = tx_ref.adda;
-        tx->addb = tx_ref.addb;
+        tx->i_en = in_tx_ref.i_en;
+        tx->adda = in_tx_ref.adda;
+        tx->addb = in_tx_ref.addb;
     }
     else
     {
@@ -244,6 +238,12 @@ int main(int argc, char **argv)
     adder_pipe_64bitOutMon *outMon = new adder_pipe_64bitOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
+
+    // initial data
+    in_tx_ref.adda = (((uint64_t)rand()) << 32) | rand();
+    in_tx_ref.addb = (((uint64_t)rand()) << 32) | rand();
+    in_tx_ref.i_en = 1;
+    out_tx_ref.o_en = 0;
     while (sim_time < MAX_SIM_TIME)
     {
         dut->clk ^= 1;
@@ -270,6 +270,9 @@ int main(int argc, char **argv)
             dut->eval();
 
         // end of positive edge processing
+
+        // update out_tx_ref o_eb
+        out_tx_ref.o_en = dut->o_en;
 
         m_trace->dump(sim_time);
         sim_time++;

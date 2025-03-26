@@ -90,9 +90,13 @@ public:
     {{
         /* TODO BEGIN 4 */
         myexit(0, "Delete me first before filling this TODO")
+        if (tx != NULL)
+        {{
+
+            delete tx;
+        }}
         /* TODO END 4 */
         
-        delete tx;
         dut->eval();
     }}
 }};
