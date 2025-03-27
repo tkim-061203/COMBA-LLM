@@ -14,7 +14,7 @@ module accu(
    wire add_cnt;
    wire ready_add;
    wire end_cnt;
-   reg [9:0]   data_out_reg;
+//    reg [9:0]   data_out_reg;
 
    assign add_cnt = ready_add;
    assign end_cnt = ready_add && (count == 'd3);
@@ -32,18 +32,18 @@ module accu(
        end
    end
 
-    //data_out_reg
-   always @(posedge clk or negedge rst_n) begin
-      if(!rst_n) begin
-        data_out_reg <= 0;
-      end
-      else if (add_cnt && count == 0) begin
-          data_out_reg <= {2'b0, data_in};
-      end
-      else if (add_cnt) begin
-          data_out_reg <= data_out_reg + {2'b0, data_in};
-      end
-   end
+//     //data_out_reg
+//    always @(posedge clk or negedge rst_n) begin
+//       if(!rst_n) begin
+//         data_out_reg <= 0;
+//       end
+//       else if (add_cnt && count == 0) begin
+//           data_out_reg <= ({2'b0, data_in} + 1'b1);
+//       end
+//       else if (add_cnt) begin
+//           data_out_reg <= data_out_reg + {2'b0, data_in};
+//       end
+//    end
 
     //data_out
    always @(posedge clk or negedge rst_n) begin

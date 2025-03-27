@@ -27,11 +27,12 @@ module accu(
                     valid_out <= 1; // Set valid_out for one cycle
                     count <= 0; // Reset count for next accumulation
                 end else begin
-                    valid_out <= 0; // valid_out is low until 4 inputs are received
+                    valid_out <= 0; // valid_out is 0 until 4 inputs are received
                 end
             end else begin
-                valid_out <= 0; // valid_out is low if valid_in is not asserted
+                valid_out <= 0; // valid_out is 0 if valid_in is not asserted
             end
         end
     end
+
 endmodule
