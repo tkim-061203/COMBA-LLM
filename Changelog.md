@@ -14,6 +14,8 @@
 - Compilation Structure for submodule of a complex module.
 - Another LLM for Stating the current module/submodule.
 - Aticulate waveform.vcd
+- (From 2.3.0) Construct module verilog as templatable verilog code*
+- (From 2.3.0) `BLKANDNBLK` rag should be refined.
 
 ## Notice
 
@@ -22,7 +24,7 @@
 
 ## 2.3.0
 
- - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
+  - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
 
 ## 2.2.0
 
