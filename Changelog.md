@@ -16,15 +16,20 @@
 - Aticulate waveform.vcd
 - (From 2.3.0) Construct module verilog as templatable verilog code*
 - (From 2.3.0) `BLKANDNBLK` rag should be refined.
+- Refinement method for failed output of Generator/Correcter.
 
 ## Notice
 
 - In case of the `adder_16bit`, the exist modules must be eliminated from the exist! To avoid errors!
 - In case of the `multi_pipe_8bit`, shoule be tempalte for structure functional/operational description.
+- In case of the `JC_counter`, normal module. No substantial refinement for prompt.
 
 ## 2.3.0
 
   - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
+  - `JC_counter`: 64-bit, but similar description in 4-bit*. Reference Software simulation signal `out_tx_ref.Q` in testbench.
+    - Latch old state of the `Q`!
+    - But high LnOC.
 
 ## 2.2.0
 
