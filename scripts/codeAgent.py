@@ -325,7 +325,9 @@ class LLMCodeAgent:
             #
             additionContent = {"exceptionTitleAdditionContent": ""}
             # ask for addition of the warning and update warning description
-            if firstWarning["exceptionTitle"] not in self._verilator_warns:
+            if (firstWarning["exceptionTitle"] not in self._verilator_warns) and (
+                firstWarning["exceptionTitle"] != "None"
+            ):
                 print("firstWarning", firstWarning)
                 if (
                     input(
