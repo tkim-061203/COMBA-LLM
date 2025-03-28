@@ -14,12 +14,19 @@
 - Compilation Structure for submodule of a complex module.
 - Another LLM for Stating the current module/submodule.
 - Aticulate waveform.vcd
+- (From 2.3.0) Construct module verilog as templatable verilog code*
+- (From 2.3.0) `BLKANDNBLK` rag should be refined.
 
 ## Notice
 
 - In case of the `adder_16bit`, the exist modules must be eliminated from the exist! To avoid errors!
+- In case of the `multi_pipe_8bit`, shoule be tempalte for structure functional/operational description.
 
-# 2.2.0
+## 2.3.0
+
+  - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
+
+## 2.2.0
 
 - Report making, report folder for each module.
   - Syntax and function checks' exports 
@@ -32,6 +39,7 @@
 
 - TB template change: 7 todo templates
 - Ignore PINCONNECTEMPTY, UNOPTFLAT of Verilator
+- Ignore all warning: Wno-fatal
 
 ## 2.1.0
 

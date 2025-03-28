@@ -233,9 +233,11 @@ class LLMCodeAgent:
             return "code_fixer"
         return END
 
-    def warning_list(self, log: str, firstOnly=True):
+    def warning_list(self, log: str, firstOnly=True, errorOnly=True):
+
+        warnRegex = "Warning" if not errorOnly else ""
         WarningRegex = re.compile(
-            r"%(?P<exceptionType>Warning|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z0-9_]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
+            rf"%(?P<exceptionType>{warnRegex}|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z0-9_]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
             re.MULTILINE,
         )
 
@@ -323,7 +325,9 @@ class LLMCodeAgent:
             #
             additionContent = {"exceptionTitleAdditionContent": ""}
             # ask for addition of the warning and update warning description
-            if firstWarning["exceptionTitle"] not in self._verilator_warns:
+            if (firstWarning["exceptionTitle"] not in self._verilator_warns) and (
+                firstWarning["exceptionTitle"] != "None"
+            ):
                 print("firstWarning", firstWarning)
                 if (
                     input(
@@ -352,9 +356,7 @@ class LLMCodeAgent:
             if firstWarning["exceptionType"] == "Warning":
                 prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 Here is the related in-line content with the {exceptionType}:
-
 {logContent}
-
 {exceptionTitleAdditionContent}
     """.format(
                     **(firstWarning | additionContent)
@@ -362,9 +364,7 @@ Here is the related in-line content with the {exceptionType}:
             elif firstWarning["lineException"] != None:  # error with line number
                 prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
 Here is the related in-line content with the {exceptionType}:
-
 {logContent}
-
 {exceptionTitleAdditionContent}
     """.format(
                     **(firstWarning | additionContent)

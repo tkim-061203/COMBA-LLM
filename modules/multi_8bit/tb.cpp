@@ -5,7 +5,7 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <Vadder_32bit__Syms.h>
+#include <Vmulti_8bit__Syms.h>
 #include <assert.h>
 
 using namespace std;
@@ -21,63 +21,62 @@ using namespace std;
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
 
-class adder_32bitInTx
+class multi_8bitInTx
 {
 public:
     /* TODO BEGIN 1 */
-    u_int64_t A, B;
+    uint16_t A, B;
     /* TODO END 1 */
 };
 
-class adder_32bitOutTx
+class multi_8bitOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    u_int64_t S;
-    u_int8_t C32;
+    uint32_t product;
     /* TODO END 2 */
 };
 
-class adder_32bitScb
+class multi_8bitScb
 {
 private:
-    std::deque<adder_32bitInTx *> in_q;
+    std::deque<multi_8bitInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn(adder_32bitInTx *tx)
+    void writeIn(multi_8bitInTx *tx)
     {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
     }
 
     // Output interface monitor port
-    void writeOut(adder_32bitOutTx *tx)
+    void writeOut(multi_8bitOutTx *tx)
     {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
         {
-            std::cout << "Fatal Error in adder_32bitScb: empty adder_32bitInTx queue" << std::endl;
+            std::cout << "Fatal Error in multi_8bitScb: empty multi_8bitInTx queue" << std::endl;
             exit(1);
         }
 
         // Grab the transaction item from the front of the input item queue
-        adder_32bitInTx *in;
+        multi_8bitInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (!((tx->S | (tx->C32 << 32)) == (in->A + in->B)))
+        if (!(tx->product == (in->A * in->B)))
         {
             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-            printf("\r\n# TODO 3 INPUT TRACE: in->A = 0x%x, in->B = 0x%x", in->A, in->B);
-            printf("\r\n# TODO 3 OUTPUT TRACE: tx->C32 = 0x%x, tx->S = 0x%x", tx->C32, tx->S);
+            printf("\r\n# TODO 3 INPUT TRACE: , in->A = %x, in->B = %x", in->A, in->B);
+            printf("\r\n# TODO 3 OUTPUT TRACE: tx->product = %x", tx->product);
 
             printf("\r\n");
             fflush(stdout);
 
-            myexit((tx->S | (tx->C32 << 32)) == (in->A + in->B), "TODO 3 Failed: Addition logic result of the Verilog module is incorrect")
+            myexit(tx->product == (in->A * in->B), "TODO 3 Failed: Accumulation output logic result of the Verilog module is incorrect when valid_out is on")
         }
         /* TODO END 3 */
 
@@ -86,44 +85,47 @@ public:
     }
 };
 
-class adder_32bitInDrv
+class multi_8bitInDrv
 {
 private:
-    Vadder_32bit *dut;
+    Vmulti_8bit *dut;
 
 public:
-    adder_32bitInDrv(Vadder_32bit *dut)
+    multi_8bitInDrv(Vmulti_8bit *dut)
     {
         this->dut = dut;
     }
 
-    void drive(adder_32bitInTx *tx)
+    void drive(multi_8bitInTx *tx)
     {
         /* TODO BEGIN 4 */
-        dut->A = tx->A;
-        dut->B = tx->B;
+        if (tx != NULL)
+        {
+            dut->A = tx->A;
+            dut->B = tx->B;
+            delete tx;
+        }
         /* TODO END 4 */
 
-        delete tx;
         dut->eval();
     }
 };
 
-class adder_32bitInMon
+class multi_8bitInMon
 {
 private:
-    Vadder_32bit *dut;
-    adder_32bitScb *scb;
+    Vmulti_8bit *dut;
+    multi_8bitScb *scb;
 
 public:
-    adder_32bitInMon(Vadder_32bit *dut, adder_32bitScb *scb)
+    multi_8bitInMon(Vmulti_8bit *dut, multi_8bitScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        adder_32bitInTx *tx = new adder_32bitInTx();
+        multi_8bitInTx *tx = new multi_8bitInTx();
 
         /* TODO BEGIN 5 */
         tx->A = dut->A;
@@ -134,40 +136,38 @@ public:
     }
 };
 
-class adder_32bitOutMon
+class multi_8bitOutMon
 {
 private:
-    Vadder_32bit *dut;
-    adder_32bitScb *scb;
+    Vmulti_8bit *dut;
+    multi_8bitScb *scb;
 
 public:
-    adder_32bitOutMon(Vadder_32bit *dut, adder_32bitScb *scb)
+    multi_8bitOutMon(Vmulti_8bit *dut, multi_8bitScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        adder_32bitOutTx *tx = new adder_32bitOutTx();
+        multi_8bitOutTx *tx = new multi_8bitOutTx();
 
         /* TODO BEGIN 6 */
-        tx->S = dut->S;
-        tx->C32 = dut->C32;
+        tx->product = dut->product;
         /* TODO END 6 */
 
         scb->writeOut(tx);
     }
 };
 
-adder_32bitInTx *rndAluInTx()
+multi_8bitInTx *rndAluInTx()
 {
-    adder_32bitInTx *tx = new adder_32bitInTx();
+    multi_8bitInTx *tx = new multi_8bitInTx();
     /* TODO BEGIN 7 */
-    tx->A = random();
-    tx->B = random();
+    tx->A = rand() & 0xff;
+    tx->B = rand() & 0xff;
     /* TODO END 7 */
 
-    tx_data_gen_time += 1;
     return tx;
 }
 
@@ -175,25 +175,24 @@ int main(int argc, char **argv)
 {
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
-    Vadder_32bit *dut = new Vadder_32bit;
+    Vmulti_8bit *dut = new Vmulti_8bit;
 
     Verilated::traceEverOn(true);
     VerilatedVcdC *m_trace = new VerilatedVcdC;
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    adder_32bitInTx *tx;
+    multi_8bitInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    adder_32bitInDrv *drv = new adder_32bitInDrv(dut);
-    adder_32bitScb *scb = new adder_32bitScb();
-    adder_32bitInMon *inMon = new adder_32bitInMon(dut, scb);
-    adder_32bitOutMon *outMon = new adder_32bitOutMon(dut, scb);
+    multi_8bitInDrv *drv = new multi_8bitInDrv(dut);
+    multi_8bitScb *scb = new multi_8bitScb();
+    multi_8bitInMon *inMon = new multi_8bitInMon(dut, scb);
+    multi_8bitOutMon *outMon = new multi_8bitOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-
+    while (sim_time < MAX_SIM_TIME)
     {
-
         tx = rndAluInTx();
         // Generate a randomised transaction item of type AluInTx
 
@@ -208,11 +207,10 @@ int main(int argc, char **argv)
         // Monitor the output interface
         outMon->monitor();
 
-        // end of positive edge processing
-
         m_trace->dump(sim_time);
         sim_time++;
     }
+
     /* TODO END 8 */
     m_trace->close();
     delete dut;

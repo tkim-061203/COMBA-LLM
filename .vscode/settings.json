@@ -1,0 +1,15 @@
+{
+    "C_Cpp.default.includePath": [
+        "/home/deslab02/nvmt_thesis/RTLLM_TRY_20/.ignore/verilator/include",
+        "/home/deslab02/nvmt_thesis/RTLLM_TRY_20/.work/div_16bit/obj_dir"
+    ],
+    "files.associations": {
+        "*.ts": "typescript",
+        "*.md": "markdown",
+        "*.rst": "restructuredtext",
+        "stdint.h": "c",
+        "cmath": "cpp",
+        "vector": "cpp",
+        "iostream": "cpp"
+    }
+}

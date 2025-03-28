@@ -6,3 +6,5 @@
 **/.llmcache
 **/.history/*
 volumes
+core.*
+waveform.vcd
