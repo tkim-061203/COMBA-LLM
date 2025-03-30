@@ -17,6 +17,7 @@
 - (From 2.3.0) Construct module verilog as templatable verilog code*
 - (From 2.3.0) `BLKANDNBLK` rag should be refined.
 - Refinement method for failed output of Generator/Correcter.
+- Template for dual-clock modules.
 
 ## Notice
 
@@ -30,6 +31,10 @@
   - `JC_counter`: 64-bit, but similar description in 4-bit*. Reference Software simulation signal `out_tx_ref.Q` in testbench.
     - Latch old state of the `Q`!
     - But high LnOC.
+  - `right_shifter`: too simple module! No more complex or templating prompt.
+  - `synchronizer`: 2 input clocks.
+    - Template of TB for remaining input data.
+    - The module shoule only stage data_en if only stage_reg is zero.
 
 ## 2.2.0
 

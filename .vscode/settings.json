@@ -1,7 +1,7 @@
 {
     "C_Cpp.default.includePath": [
         "/home/deslab02/nvmt_thesis/RTLLM_TRY_20/.ignore/verilator/include",
-        "/home/deslab02/nvmt_thesis/RTLLM_TRY_20/.work/JC_counter/obj_dir"
+        "/home/deslab02/nvmt_thesis/RTLLM_TRY_20/.work/synchronizer/obj_dir"
     ],
     "files.associations": {
         "*.ts": "typescript",
