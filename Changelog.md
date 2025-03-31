@@ -8,6 +8,7 @@
 - Initial generation is only at the start. No flow integration for the generator.
 - No self-planing method.
 - No PPA now
+- Complex testbench template for latch state.
 
 ## Further
 
@@ -18,6 +19,9 @@
 - (From 2.3.0) `BLKANDNBLK` rag should be refined.
 - Refinement method for failed output of Generator/Correcter.
 - Template for dual-clock modules.
+[ ] - Prompt template for statement: if-else, case, ...
+- Comment options for testbench template.
+- Simplify Complex testbench template for latch state.
 
 ## Notice
 
@@ -35,6 +39,13 @@
   - `synchronizer`: 2 input clocks.
     - Template of TB for remaining input data.
     - The module shoule only stage data_en if only stage_reg is zero.
+  - `freq_div`: unique in clk and rst name.
+    - `tx_dada_gen_time`: must be in modable form.
+    - Should be counter in tb. TB supports counter.
+    - MACRO Template for TB data structure?
+    - Description for latching state.
+  - `signal_generator`: prompt template for if-else statements.
+    - complex testbench template for latch state.
 
 ## 2.2.0
 

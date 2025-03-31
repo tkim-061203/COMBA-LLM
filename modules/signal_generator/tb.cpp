@@ -5,20 +5,20 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <V{modulename}__Syms.h>
+#include <Vsignal_generator__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-V{modulename} *dut = new V{modulename};
+Vsignal_generator *dut = new Vsignal_generator;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define myexit(condition, content)   \
-    {{                                \
+    {                                \
         assert(condition &&content); \
-    }}
+    }
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -60,156 +60,224 @@ typedef struct
     uint64_t *selector;
 } latch_management;
 
-class {modulename}InTx
-{{
+latch_management latch_management_wave = {.selector = &latch_management_wave.after_latch_state};
+
+class signal_generatorInTx
+{
 public:
     /* TODO BEGIN 1 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t clk,
+        rst_n;
     /* TODO END 1 */
-}};
+};
 
-class {modulename}OutTx
-{{
+class signal_generatorOutTx
+{
 public:
     /* TODO BEGIN 2 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t wave;
     /* TODO END 2 */
-}};
+};
 
-class {modulename}Scb
-{{
+class signal_generatorInternalTx
+{
+public:
+    /* TODO BEGIN 2 */
+    uint8_t state;
+    /* TODO END 2 */
+};
+
+signal_generatorInternalTx internal_tx_ref;
+
+class signal_generatorScb
+{
 private:
-    std::deque<{modulename}InTx *> in_q;
+    std::deque<signal_generatorInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn({modulename}InTx *tx)
-    {{
+    void writeIn(signal_generatorInTx *tx)
+    {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
-    }}
+    }
 
     // Output interface monitor port
-    void writeOut({modulename}OutTx *tx)
-    {{
+    void writeOut(signal_generatorOutTx *tx)
+    {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
-        {{
-            std::cout << "Fatal Error in {modulename}Scb: empty {modulename}InTx queue" << std::endl;
+        {
+            std::cout << "Fatal Error in signal_generatorScb: empty signal_generatorInTx queue" << std::endl;
             exit(1);
-        }}
+        }
 
         // Grab the transaction item from the front of the input item queue
-        {modulename}InTx *in;
+        signal_generatorInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        myexit(0, "Delete me first before filling this TODO")
+        if (in->rst_n == 0)
+        {
+            LATCH_MANAGEMENT_SELECTOR_ASSIGN(latch_management_wave, 1);
+            if (!(tx->wave == 0))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->wave = 0x%x", tx->wave);
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->wave == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+            }
+        }
+        else
+        {
+
+            if (!(tx->wave == LATCH_MANAGEMENT_SELECTOR_VAL(latch_management_wave)))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->wave = 0x%x", tx->wave);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: tx->wave = 0x%lx, %d", LATCH_MANAGEMENT_SELECTOR_VAL(latch_management_wave), LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(latch_management_wave));
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->wave == 0, "TODO 3 Failed: Wave logic result of the Verilog module is incorrect")
+            }
+
+            if (internal_tx_ref.state == 0)
+            {
+                LATCH_MANAGEMENT_SELECTOR_TO_LATCH_IF_THRESHOLD(latch_management_wave, 31, {
+
+                                                                                           },
+                                                                {
+                                                                    internal_tx_ref.state = 1;
+                                                                    LATCH_MANAGEMENT_SELECTOR_OPERATE_IF_IS_AFTER_LATCH(latch_management_wave, -, 1); }, {
+                                                                    LATCH_MANAGEMENT_SELECTOR_OPERATE_IF_IS_AFTER_LATCH(latch_management_wave, +, 1); //
+                                                                })
+            }
+            else
+            {
+                LATCH_MANAGEMENT_SELECTOR_TO_LATCH_IF_THRESHOLD(latch_management_wave, 0, {
+
+                                                                                          },
+                                                                {
+                                                                    internal_tx_ref.state = 0; //
+                                                                    LATCH_MANAGEMENT_SELECTOR_OPERATE_IF_IS_AFTER_LATCH(latch_management_wave, +, 1); }, {
+                                                                    LATCH_MANAGEMENT_SELECTOR_OPERATE_IF_IS_AFTER_LATCH(latch_management_wave, -, 1); //
+                                                                })
+            }
+        }
+
         /* TODO END 3 */
 
         delete in;
         delete tx;
-    }}
-}};
+    }
+};
 
-class {modulename}InDrv
-{{
+class signal_generatorInDrv
+{
 private:
-    V{modulename} *dut;
+    Vsignal_generator *dut;
 
 public:
-    {modulename}InDrv(V{modulename} *dut)
-    {{
+    signal_generatorInDrv(Vsignal_generator *dut)
+    {
         this->dut = dut;
-    }}
+    }
 
-    void drive({modulename}InTx *tx)
-    {{
+    void drive(signal_generatorInTx *tx)
+    {
         /* TODO BEGIN 4 */
-        myexit(0, "Delete me first before filling this TODO")
         if (tx != NULL)
-        {{
-
+        {
+            dut->rst_n = tx->rst_n;
             delete tx;
-        }}
+        }
         /* TODO END 4 */
-        
-        dut->eval();
-    }}
-}};
 
-class {modulename}InMon
-{{
+        dut->eval();
+    }
+};
+
+class signal_generatorInMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vsignal_generator *dut;
+    signal_generatorScb *scb;
 
 public:
-    {modulename}InMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    signal_generatorInMon(Vsignal_generator *dut, signal_generatorScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}InTx *tx = new {modulename}InTx();
+    {
+        signal_generatorInTx *tx = new signal_generatorInTx();
 
         /* TODO BEGIN 5 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->rst_n = dut->rst_n;
         /* TODO END 5 */
 
         scb->writeIn(tx);
-    }}
-}};
+    }
+};
 
-class {modulename}OutMon
-{{
+class signal_generatorOutMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vsignal_generator *dut;
+    signal_generatorScb *scb;
 
 public:
-    {modulename}OutMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    signal_generatorOutMon(Vsignal_generator *dut, signal_generatorScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}OutTx *tx = new {modulename}OutTx();
-        
+    {
+        signal_generatorOutTx *tx = new signal_generatorOutTx();
+
         /* TODO BEGIN 6 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->wave = dut->wave;
         /* TODO END 6 */
 
         scb->writeOut(tx);
-    }}
-}};
+    }
+};
 
-{modulename}InTx *rndAluInTx()
-{{
-    {modulename}InTx *tx = new {modulename}InTx();
+signal_generatorInTx *rndAluInTx()
+{
+    signal_generatorInTx *tx = new signal_generatorInTx();
     /* TODO BEGIN 7 */
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst = 0;
-    
-    myexit(0, "Delete me first before filling this TODO")
+    {
+        tx->rst_n = 0;
+        internal_tx_ref.state = 0;
+    }
+
+    else if (sim_time >= VERIF_START_TIME)
+    {
+        tx->rst_n = 1;
+    }
 
     else
-    {{
+    {
         delete tx;
         return NULL;
-    }}
+    }
     /* TODO END 7 */
-    
-    tx_data_gen_time += tx->rst;
     return tx;
-}}
+}
 
 int main(int argc, char **argv)
-{{
+{
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
 
@@ -218,23 +286,22 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    {modulename}InTx *tx;
+    signal_generatorInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    {modulename}InDrv *drv = new {modulename}InDrv(dut);
-    {modulename}Scb *scb = new {modulename}Scb();
-    {modulename}InMon *inMon = new {modulename}InMon(dut, scb);
-    {modulename}OutMon *outMon = new {modulename}OutMon(dut, scb);
+    signal_generatorInDrv *drv = new signal_generatorInDrv(dut);
+    signal_generatorScb *scb = new signal_generatorScb();
+    signal_generatorInMon *inMon = new signal_generatorInMon(dut, scb);
+    signal_generatorOutMon *outMon = new signal_generatorOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO")
     while (sim_time < MAX_SIM_TIME)
-    {{
+    {
         dut->clk ^= 1;
 
         // Do all the driving/monitoring on a positive edge
         if ((dut->clk == 1 || IS_SIM_TIME_IN_RST(sim_time)) && sim_time)
-        {{
+        {
 
             tx = rndAluInTx();
             // Generate a randomised transaction item of type AluInTx
@@ -249,7 +316,7 @@ int main(int argc, char **argv)
 
             // Monitor the output interface
             outMon->monitor();
-        }}
+        }
         else
             dut->eval();
 
@@ -257,7 +324,7 @@ int main(int argc, char **argv)
 
         m_trace->dump(sim_time);
         sim_time++;
-    }}
+    }
     /* TODO END 8 */
     m_trace->close();
     delete dut;
@@ -267,4 +334,4 @@ int main(int argc, char **argv)
     delete drv;
     exit(EXIT_SUCCESS);
     return 0;
-}}
+}
