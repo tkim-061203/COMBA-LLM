@@ -7,7 +7,7 @@
 - Refine based on exception only.
 - Initial generation is only at the start. No flow integration for the generator.
 - No self-planing method.
-- No PPA now
+- No PPA now.
 - Complex testbench template for latch state.
 
 ## Further
@@ -19,15 +19,27 @@
 - (From 2.3.0) `BLKANDNBLK` rag should be refined.
 - Refinement method for failed output of Generator/Correcter.
 - Template for dual-clock modules.
-[ ] - Prompt template for statement: if-else, case, ...
+- [ ] Prompt template for statement: if-else, case, ...
 - Comment options for testbench template.
 - Simplify Complex testbench template for latch state.
+- [ ] Labeling method for testbench. Eg. TODOs comments.
+- Availability of Circuit Types for LLM testbench generation and description
+
+> [!NOTE]
+> - Design should not be in timescale-based like `parallel2serial`
+
+  - Should be a transition for timescale-based modules.
 
 ## Notice
 
 - In case of the `adder_16bit`, the exist modules must be eliminated from the exist! To avoid errors!
 - In case of the `multi_pipe_8bit`, shoule be tempalte for structure functional/operational description.
 - In case of the `JC_counter`, normal module. No substantial refinement for prompt.
+
+> [!NOTE]
+> - Descriptions based on behaviour of reference model!
+
+- Must use reference in & out in testbench!
 
 ## 2.3.0
 
@@ -46,6 +58,8 @@
     - Description for latching state.
   - `signal_generator`: prompt template for if-else statements.
     - complex testbench template for latch state.
+  - `serial2parallel`: Stage template for testbench
+  - `div_8bit`: combinational/sequencial description template.
 
 ## 2.2.0
 
