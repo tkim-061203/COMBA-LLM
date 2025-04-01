@@ -47,6 +47,7 @@
   - Due to [Verilator doc](https://verilator.org/guide/latest/connecting.html), up date combinational logic in a separate `eval()`.
   - Handle both sequential and combinational updates! Update combinational logic before sequential logic computing.
   - Prompt template for parameter description.
+- `edge_detect`: testbench should based on style: `reference events`, not `module events`!!!
 
 > [!NOTE]
 > Note combinatorial logic is not computed before sequential always blocks are computed (for speed reasons). Therefore it is best to set any **non-clock inputs up with a separate eval()** call before changing clocks.
