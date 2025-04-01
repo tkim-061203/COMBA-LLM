@@ -41,6 +41,16 @@
 
 - Must use reference in & out in testbench!
 
+## 2.4.0
+
+- `pulse_detect`: `in_tx_ref` depth/history for template testbench.
+  - Due to [Verilator doc](https://verilator.org/guide/latest/connecting.html), up date combinational logic in a separate `eval()`.
+  - Handle both sequential and combinational updates! Update combinational logic before sequential logic computing.
+  - Prompt template for parameter description.
+
+> [!NOTE]
+> Note combinatorial logic is not computed before sequential always blocks are computed (for speed reasons). Therefore it is best to set any **non-clock inputs up with a separate eval()** call before changing clocks.
+
 ## 2.3.0
 
   - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
