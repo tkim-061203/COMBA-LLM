@@ -30,6 +30,14 @@
 
   - Should be a transition for timescale-based modules.
 
+- [ ] Reference Model-based Testbench generation.
+
+> [!NOTE]
+> - [ ] From `fsm`: `Tokenize/encode` the `description.txt` for more benchmarking and templating.
+>   - [ ] How to generate encode prompt?
+
+- [ ] Prompt template for if-else statement: [Source](https://tilburg.ai/2024/07/become-a-prompt-engineer-conditional-prompt/)
+
 ## Notice
 
 - In case of the `adder_16bit`, the exist modules must be eliminated from the exist! To avoid errors!
