@@ -1,4 +1,10 @@
-# Rework 3.0: Langraph
+# Rework 3.0: Waveform Testbench based on VCD Generation from Verilator
+
+## 3.0.0
+
+- [vcdvcd](https://github.com/cirosantilli/vcdvcd) Lib.
+
+# Rework 2.0: Langraph
 
 ## Limit
 
@@ -15,7 +21,7 @@
 - Compilation Structure for submodule of a complex module.
 - Another LLM for Stating the current module/submodule.
 - Aticulate waveform.vcd
-- (From 2.3.0) Construct module verilog as templatable verilog code*
+- (From 2.3.0) Construct module verilog as templatable verilog code\*
 - (From 2.3.0) `BLKANDNBLK` rag should be refined.
 - Refinement method for failed output of Generator/Correcter.
 - Template for dual-clock modules.
@@ -26,17 +32,21 @@
 - Availability of Circuit Types for LLM testbench generation and description
 
 > [!NOTE]
+>
 > - Design should not be in timescale-based like `parallel2serial`
 
-  - Should be a transition for timescale-based modules.
+- Should be a transition for timescale-based modules.
 
 - [ ] Reference Model-based Testbench generation.
 
 > [!NOTE]
+>
 > - [ ] From `fsm`: `Tokenize/encode` the `description.txt` for more benchmarking and templating.
 >   - [ ] How to generate encode prompt?
 
 - [ ] Prompt template for if-else statement: [Source](https://tilburg.ai/2024/07/become-a-prompt-engineer-conditional-prompt/)
+- [ ] Enhance template of freestyle prompt of RTLLM.
+- [ ] Prompt Flow for Base Design and final Logic Design.
 
 ## Notice
 
@@ -45,6 +55,7 @@
 - In case of the `JC_counter`, normal module. No substantial refinement for prompt.
 
 > [!NOTE]
+>
 > - Descriptions based on behaviour of reference model!
 
 - Must use reference in & out in testbench!
@@ -62,33 +73,34 @@
 
 ## 2.3.0
 
-  - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
-  - `JC_counter`: 64-bit, but similar description in 4-bit*. Reference Software simulation signal `out_tx_ref.Q` in testbench.
-    - Latch old state of the `Q`!
-    - But high LnOC.
-  - `right_shifter`: too simple module! No more complex or templating prompt.
-  - `synchronizer`: 2 input clocks.
-    - Template of TB for remaining input data.
-    - The module shoule only stage data_en if only stage_reg is zero.
-  - `freq_div`: unique in clk and rst name.
-    - `tx_dada_gen_time`: must be in modable form.
-    - Should be counter in tb. TB supports counter.
-    - MACRO Template for TB data structure?
-    - Description for latching state.
-  - `signal_generator`: prompt template for if-else statements.
-    - complex testbench template for latch state.
-  - `serial2parallel`: Stage template for testbench
-  - `div_8bit`: combinational/sequencial description template.
+- Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.
+- `JC_counter`: 64-bit, but similar description in 4-bit\*. Reference Software simulation signal `out_tx_ref.Q` in testbench.
+  - Latch old state of the `Q`!
+  - But high LnOC.
+- `right_shifter`: too simple module! No more complex or templating prompt.
+- `synchronizer`: 2 input clocks.
+  - Template of TB for remaining input data.
+  - The module shoule only stage data_en if only stage_reg is zero.
+- `freq_div`: unique in clk and rst name.
+  - `tx_dada_gen_time`: must be in modable form.
+  - Should be counter in tb. TB supports counter.
+  - MACRO Template for TB data structure?
+  - Description for latching state.
+- `signal_generator`: prompt template for if-else statements.
+  - complex testbench template for latch state.
+- `serial2parallel`: Stage template for testbench
+- `div_8bit`: combinational/sequencial description template.
 
 ## 2.2.0
 
 - Report making, report folder for each module.
-  - Syntax and function checks' exports 
+  - Syntax and function checks' exports
 - `workFolderName` dependency for LLMAgent
 - Preparation for docker testbench
 - Prompting for Verilator Additional Warnings Content
 
 - Finish:
+
   - [x] adder_8bit
 
 - TB template change: 7 todo templates
@@ -122,6 +134,7 @@ compile: NO EXCEPTION NOW! ###Verilating for adder_8bit###
 - Single module compilation only.
 - Prompt Template for the Code Fixer LLM.
   - Json/dict format for the output
+
 # Purpose
 
 - Improve RTLLM
