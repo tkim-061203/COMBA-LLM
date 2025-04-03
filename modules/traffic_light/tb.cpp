@@ -5,21 +5,21 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <V{modulename}__Syms.h>
+#include <Vtraffic_light__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-V{modulename} *dut = new V{modulename};
+Vtraffic_light *dut = new Vtraffic_light;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
 #define myexit(condition, content)   \
-    {{                                \
+    {                                \
         assert(condition &&content); \
-    }}
+    }
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -41,200 +41,223 @@ vluint8_t combinational_logic_update = COMBINATIONAL_LOGIC_EVAL_EN;
 #define LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(lm) (lm.selector == &lm.after_latch_state)
 #define LATCH_MANAGEMENT_SELECTOR_TO_LATCH_IF_THRESHOLD(lm, threshold, statement1, statement2, statement3) \
     if (LATCH_MANAGEMENT_SELECTOR_VAL(lm) == threshold)                                                    \
-    {{                                                                                                      \
+    {                                                                                                      \
         if (LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(lm))                                                  \
-        {{                                                                                                  \
+        {                                                                                                  \
             LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm);                                                        \
             LATCH_MANAGEMENT_LATCH_ASSIGN(lm, lm.after_latch_state);                                       \
             statement1                                                                                     \
-        }}                                                                                                 \
+        }                                                                                                  \
         else                                                                                               \
-        {{                                                                                                  \
+        {                                                                                                  \
             LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm);                                                  \
             statement2                                                                                     \
-        }}                                                                                                  \
-    }}                                                                                                      \
+        }                                                                                                  \
+    }                                                                                                      \
     else                                                                                                   \
-    {{                                                                                                      \
+    {                                                                                                      \
         statement3                                                                                         \
-    }}
+    }
 #define LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm) (lm.selector = &lm.latch_state)
 #define LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm) (lm.selector = &lm.after_latch_state)
 #define LATCH_MANAGEMENT_LATCH_ASSIGN(lm, x) (lm.latch_state = lm.after_latch_state)
 typedef struct
-{{
+{
     uint64_t latch_state;
     uint64_t after_latch_state;
     uint64_t *selector;
-}} latch_management;
+} latch_management;
 
-class {modulename}InTx
-{{
+class traffic_lightInTx
+{
 public:
     /* TODO BEGIN 1 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t rst_n,
+        pass_request;
     /* TODO END 1 */
-}};
+};
 
-class {modulename}OutTx
-{{
+class traffic_lightOutTx
+{
 public:
     /* TODO BEGIN 2 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t clock,
+        red,
+        yellow, green;
     /* TODO END 2 */
-}};
+};
 
-class {modulename}InternalTx
-{{
+class traffic_lightInternalTx
+{
 public:
     /* TODO BEGIN 2 */
     uint8_t a0;
     /* TODO END 2 */
-}};
+};
 
-// {modulename}InTx in_tx_ref;
-// {modulename}OutTx out_tx_ref;
-// {modulename}InternalTx internal_tx_ref;
+traffic_lightInTx in_tx_ref;
+traffic_lightOutTx out_tx_ref;
+traffic_lightInternalTx internal_tx_ref;
 
-class {modulename}Scb
-{{
+class traffic_lightScb
+{
 private:
-    std::deque<{modulename}InTx *> in_q;
+    std::deque<traffic_lightInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn({modulename}InTx *tx)
-    {{
+    void writeIn(traffic_lightInTx *tx)
+    {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
-    }}
+    }
 
     // Output interface monitor port
-    void writeOut({modulename}OutTx *tx)
-    {{
+    void writeOut(traffic_lightOutTx *tx)
+    {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
-        {{
-            std::cout << "Fatal Error in {modulename}Scb: empty {modulename}InTx queue" << std::endl;
+        {
+            std::cout << "Fatal Error in traffic_lightScb: empty traffic_lightInTx queue" << std::endl;
             exit(1);
-        }}
+        }
 
         // Grab the transaction item from the front of the input item queue
-        {modulename}InTx *in;
+        traffic_lightInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        myexit(0, "Delete me first before filling this TODO")
+        // myexit(0, "Delete me first before filling this TODO")
         /* TODO END 3 */
 
         delete in;
         delete tx;
-    }}
-}};
+    }
+};
 
-class {modulename}InDrv
-{{
+class traffic_lightInDrv
+{
 private:
-    V{modulename} *dut;
+    Vtraffic_light *dut;
 
 public:
-    {modulename}InDrv(V{modulename} *dut)
-    {{
+    traffic_lightInDrv(Vtraffic_light *dut)
+    {
         this->dut = dut;
-    }}
+    }
 
-    void drive({modulename}InTx *tx)
-    {{
+    void drive(traffic_lightInTx *tx)
+    {
         /* TODO BEGIN 4 */
-        myexit(0, "Delete me first before filling this TODO")
         if (tx != NULL)
-        {{
+        {
+            dut->pass_request = tx->pass_request;
             if (COMBINATIONAL_LOGIC_EVAL_EN)
                 dut->eval(); // combinational update
+            dut->rst_n = tx->rst_n;
             delete tx;
-        }}
+        }
         /* TODO END 4 */
-        
+
         dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
         dut->eval(); // sequential update
-    }}
-}};
+    }
+};
 
-class {modulename}InMon
-{{
+class traffic_lightInMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vtraffic_light *dut;
+    traffic_lightScb *scb;
 
 public:
-    {modulename}InMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    traffic_lightInMon(Vtraffic_light *dut, traffic_lightScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}InTx *tx = new {modulename}InTx();
+    {
+        traffic_lightInTx *tx = new traffic_lightInTx();
 
         /* TODO BEGIN 5 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->pass_request = dut->pass_request;
+        tx->rst_n = dut->rst_n;
         /* TODO END 5 */
 
         scb->writeIn(tx);
-    }}
-}};
+    }
+};
 
-class {modulename}OutMon
-{{
+class traffic_lightOutMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vtraffic_light *dut;
+    traffic_lightScb *scb;
 
 public:
-    {modulename}OutMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    traffic_lightOutMon(Vtraffic_light *dut, traffic_lightScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}OutTx *tx = new {modulename}OutTx();
-        
+    {
+        traffic_lightOutTx *tx = new traffic_lightOutTx();
+
         /* TODO BEGIN 6 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->clock = dut->clock;
+        tx->green = dut->green;
+        tx->red = dut->red;
+        tx->yellow = dut->yellow;
         /* TODO END 6 */
 
         scb->writeOut(tx);
-    }}
-}};
+    }
+};
 
-{modulename}InTx *rndAluInTx()
-{{
-    {modulename}InTx *tx = new {modulename}InTx();
+traffic_lightInTx *rndAluInTx()
+{
+    traffic_lightInTx *tx = new traffic_lightInTx();
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, !dut->CLK);
+    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update);
+
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst = 0;
-    
-    myexit(0, "Delete me first before filling this TODO")
+        tx->rst_n = 0;
+
     else if (sim_time >= VERIF_START_TIME)
-    {{
+    {
+        if (tx_data_gen_time_increase)
+        {
+            switch (tx_data_gen_time)
+            {
+            case 0:
+                in_tx_ref.rst_n = 1;
+
+            default:
+
+                break;
+            }
+        }
+        tx->pass_request = in_tx_ref.pass_request;
+        tx->rst_n = in_tx_ref.rst_n;
+
         tx_data_gen_time += tx_data_gen_time_increase;
         tx_data_gen_time %= MAX_STAGE;
-    }}
+    }
     else
-    {{
+    {
         delete tx;
         return NULL;
-    }}
+    }
     /* TODO END 7 */
     return tx;
-}}
+}
 
 int main(int argc, char **argv)
-{{
+{
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
 
@@ -243,18 +266,17 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    {modulename}InTx *tx;
+    traffic_lightInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    {modulename}InDrv *drv = new {modulename}InDrv(dut);
-    {modulename}Scb *scb = new {modulename}Scb();
-    {modulename}InMon *inMon = new {modulename}InMon(dut, scb);
-    {modulename}OutMon *outMon = new {modulename}OutMon(dut, scb);
+    traffic_lightInDrv *drv = new traffic_lightInDrv(dut);
+    traffic_lightScb *scb = new traffic_lightScb();
+    traffic_lightInMon *inMon = new traffic_lightInMon(dut, scb);
+    traffic_lightOutMon *outMon = new traffic_lightOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO")
     while (sim_time < MAX_SIM_TIME)
-    {{
+    {
 
         tx = rndAluInTx();
         // Generate a randomised transaction item of type AluInTx
@@ -276,7 +298,7 @@ int main(int argc, char **argv)
         sim_time++;
 
         combinational_logic_update ^= COMBINATIONAL_LOGIC_EVAL_EN;
-    }}
+    }
     /* TODO END 8 */
     m_trace->close();
     delete dut;
@@ -286,4 +308,4 @@ int main(int argc, char **argv)
     delete drv;
     exit(EXIT_SUCCESS);
     return 0;
-}}
+}

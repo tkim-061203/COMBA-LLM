@@ -5,27 +5,26 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <V{modulename}__Syms.h>
+#include <Vpulse_detect__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-V{modulename} *dut = new V{modulename};
+Vpulse_detect *dut = new Vpulse_detect;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
 #define myexit(condition, content)   \
-    {{                                \
+    {                                \
         assert(condition &&content); \
-    }}
+    }
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
 
-#define COMBINATIONAL_LOGIC_EVAL_EN 0
-vluint8_t combinational_logic_update = COMBINATIONAL_LOGIC_EVAL_EN;
+vluint8_t combinational_logic_update = 1;
 #define IS_SEQUENTIAL_LOGIC_EVAL(clk, combinational) (clk && (!combinational))
 #define IS_SEQUENTIAL_LOGIC_UPDATE(combinational) (!combinational)
 #define IS_COMBINATIONAL_LOGIC_EVAL(combinational) (combinational)
@@ -41,200 +40,244 @@ vluint8_t combinational_logic_update = COMBINATIONAL_LOGIC_EVAL_EN;
 #define LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(lm) (lm.selector == &lm.after_latch_state)
 #define LATCH_MANAGEMENT_SELECTOR_TO_LATCH_IF_THRESHOLD(lm, threshold, statement1, statement2, statement3) \
     if (LATCH_MANAGEMENT_SELECTOR_VAL(lm) == threshold)                                                    \
-    {{                                                                                                      \
+    {                                                                                                      \
         if (LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(lm))                                                  \
-        {{                                                                                                  \
+        {                                                                                                  \
             LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm);                                                        \
             LATCH_MANAGEMENT_LATCH_ASSIGN(lm, lm.after_latch_state);                                       \
             statement1                                                                                     \
-        }}                                                                                                 \
+        }                                                                                                  \
         else                                                                                               \
-        {{                                                                                                  \
+        {                                                                                                  \
             LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm);                                                  \
             statement2                                                                                     \
-        }}                                                                                                  \
-    }}                                                                                                      \
+        }                                                                                                  \
+    }                                                                                                      \
     else                                                                                                   \
-    {{                                                                                                      \
+    {                                                                                                      \
         statement3                                                                                         \
-    }}
+    }
 #define LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm) (lm.selector = &lm.latch_state)
 #define LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm) (lm.selector = &lm.after_latch_state)
 #define LATCH_MANAGEMENT_LATCH_ASSIGN(lm, x) (lm.latch_state = lm.after_latch_state)
 typedef struct
-{{
+{
     uint64_t latch_state;
     uint64_t after_latch_state;
     uint64_t *selector;
-}} latch_management;
+} latch_management;
 
-class {modulename}InTx
-{{
+class pulse_detectInTx
+{
 public:
     /* TODO BEGIN 1 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t rst_n,
+        data_in;
     /* TODO END 1 */
-}};
+};
 
-class {modulename}OutTx
-{{
+class pulse_detectOutTx
+{
 public:
     /* TODO BEGIN 2 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t data_out;
     /* TODO END 2 */
-}};
+};
 
-class {modulename}InternalTx
-{{
-public:
-    /* TODO BEGIN 2 */
-    uint8_t a0;
-    /* TODO END 2 */
-}};
+pulse_detectInTx in_tx_ref;
+pulse_detectOutTx out_tx_ref;
 
-// {modulename}InTx in_tx_ref;
-// {modulename}OutTx out_tx_ref;
-// {modulename}InternalTx internal_tx_ref;
-
-class {modulename}Scb
-{{
+class pulse_detectScb
+{
 private:
-    std::deque<{modulename}InTx *> in_q;
+    std::deque<pulse_detectInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn({modulename}InTx *tx)
-    {{
+    void writeIn(pulse_detectInTx *tx)
+    {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
-    }}
+    }
 
     // Output interface monitor port
-    void writeOut({modulename}OutTx *tx)
-    {{
+    void writeOut(pulse_detectOutTx *tx)
+    {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
-        {{
-            std::cout << "Fatal Error in {modulename}Scb: empty {modulename}InTx queue" << std::endl;
+        {
+            std::cout << "Fatal Error in pulse_detectScb: empty pulse_detectInTx queue" << std::endl;
             exit(1);
-        }}
+        }
 
         // Grab the transaction item from the front of the input item queue
-        {modulename}InTx *in;
+        pulse_detectInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        myexit(0, "Delete me first before filling this TODO")
+        if (IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, tx->data_out))
+        {
+            // printf("\r\n# TODO 3 check at simtime %ld, 0x%x", sim_time, out_tx_ref.data_out);
+            if (!(out_tx_ref.data_out == 0x1))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x", tx->data_out);
+                printf("\r\n# TODO 3 REF OUTPUT TRACE: out_tx_ref.data_out = 0x%x", out_tx_ref.data_out);
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(out_tx_ref.data_out == 0x1, "TODO 3 Failed: Pulse detection logic result of the Verilog module is incorrect")
+            }
+            out_tx_ref.data_out <<= 1;
+        }
+        else if (!in->rst_n)
+        {
+            out_tx_ref.data_out = 0;
+            if (!(tx->data_out == 0))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x", tx->data_out);
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->data_out == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+            }
+        }
+        else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->clk, combinational_logic_update))
+        {
+            out_tx_ref.data_out <<= 1;
+            out_tx_ref.data_out |= in->data_in;
+            out_tx_ref.data_out &= 0x3;
+            // printf("\r\n# TODO 3 Update at simtime %ld, 0x%x", sim_time, out_tx_ref.data_out);
+        }
+
         /* TODO END 3 */
 
         delete in;
         delete tx;
-    }}
-}};
+    }
+};
 
-class {modulename}InDrv
-{{
+class pulse_detectInDrv
+{
 private:
-    V{modulename} *dut;
+    Vpulse_detect *dut;
 
 public:
-    {modulename}InDrv(V{modulename} *dut)
-    {{
+    pulse_detectInDrv(Vpulse_detect *dut)
+    {
         this->dut = dut;
-    }}
+    }
 
-    void drive({modulename}InTx *tx)
-    {{
+    void drive(pulse_detectInTx *tx)
+    {
         /* TODO BEGIN 4 */
-        myexit(0, "Delete me first before filling this TODO")
         if (tx != NULL)
-        {{
-            if (COMBINATIONAL_LOGIC_EVAL_EN)
-                dut->eval(); // combinational update
+        {
+            dut->data_in = tx->data_in;
+            dut->eval(); // combinational update
+
+            dut->rst_n = tx->rst_n; // sequential update
             delete tx;
-        }}
+        }
         /* TODO END 4 */
-        
+
         dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
         dut->eval(); // sequential update
-    }}
-}};
+    }
+};
 
-class {modulename}InMon
-{{
+class pulse_detectInMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vpulse_detect *dut;
+    pulse_detectScb *scb;
 
 public:
-    {modulename}InMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    pulse_detectInMon(Vpulse_detect *dut, pulse_detectScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}InTx *tx = new {modulename}InTx();
+    {
+        pulse_detectInTx *tx = new pulse_detectInTx();
 
         /* TODO BEGIN 5 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->data_in = dut->data_in;
+        tx->rst_n = dut->rst_n;
         /* TODO END 5 */
 
         scb->writeIn(tx);
-    }}
-}};
+    }
+};
 
-class {modulename}OutMon
-{{
+class pulse_detectOutMon
+{
 private:
-    V{modulename} *dut;
-    {modulename}Scb *scb;
+    Vpulse_detect *dut;
+    pulse_detectScb *scb;
 
 public:
-    {modulename}OutMon(V{modulename} *dut, {modulename}Scb *scb)
-    {{
+    pulse_detectOutMon(Vpulse_detect *dut, pulse_detectScb *scb)
+    {
         this->dut = dut;
         this->scb = scb;
-    }}
+    }
     void monitor()
-    {{
-        {modulename}OutTx *tx = new {modulename}OutTx();
-        
+    {
+        pulse_detectOutTx *tx = new pulse_detectOutTx();
+
         /* TODO BEGIN 6 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->data_out = dut->data_out;
         /* TODO END 6 */
 
         scb->writeOut(tx);
-    }}
-}};
+    }
+};
 
-{modulename}InTx *rndAluInTx()
-{{
-    {modulename}InTx *tx = new {modulename}InTx();
+pulse_detectInTx *rndAluInTx()
+{
+    pulse_detectInTx *tx = new pulse_detectInTx();
+    uint8_t tx_data_gen_time_increase = dut->clk;
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, !dut->CLK);
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst = 0;
-    
-    myexit(0, "Delete me first before filling this TODO")
+        tx->rst_n = 0;
+
     else if (sim_time >= VERIF_START_TIME)
-    {{
+    {
+        switch (tx_data_gen_time)
+        {
+        case 0:
+            in_tx_ref.rst_n = 1;
+            break;
+        default:
+            if (IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, !dut->clk))
+                in_tx_ref.data_in = rand() & 0x1;
+            break;
+        }
+
+        tx->data_in = in_tx_ref.data_in;
+        tx->rst_n = in_tx_ref.rst_n;
+
         tx_data_gen_time += tx_data_gen_time_increase;
         tx_data_gen_time %= MAX_STAGE;
-    }}
+    }
     else
-    {{
+    {
         delete tx;
         return NULL;
-    }}
+    }
     /* TODO END 7 */
     return tx;
-}}
+}
 
 int main(int argc, char **argv)
-{{
+{
     srand(time(NULL));
     Verilated::commandArgs(argc, argv);
 
@@ -243,18 +286,19 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    {modulename}InTx *tx;
+    pulse_detectInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    {modulename}InDrv *drv = new {modulename}InDrv(dut);
-    {modulename}Scb *scb = new {modulename}Scb();
-    {modulename}InMon *inMon = new {modulename}InMon(dut, scb);
-    {modulename}OutMon *outMon = new {modulename}OutMon(dut, scb);
+    pulse_detectInDrv *drv = new pulse_detectInDrv(dut);
+    pulse_detectScb *scb = new pulse_detectScb();
+    pulse_detectInMon *inMon = new pulse_detectInMon(dut, scb);
+    pulse_detectOutMon *outMon = new pulse_detectOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO")
     while (sim_time < MAX_SIM_TIME)
-    {{
+    {
+
+        // dut->clk ^= (!combinational_logic_update);
 
         tx = rndAluInTx();
         // Generate a randomised transaction item of type AluInTx
@@ -275,8 +319,8 @@ int main(int argc, char **argv)
         m_trace->dump(sim_time);
         sim_time++;
 
-        combinational_logic_update ^= COMBINATIONAL_LOGIC_EVAL_EN;
-    }}
+        combinational_logic_update ^= 1;
+    }
     /* TODO END 8 */
     m_trace->close();
     delete dut;
@@ -286,4 +330,4 @@ int main(int argc, char **argv)
     delete drv;
     exit(EXIT_SUCCESS);
     return 0;
-}}
+}
