@@ -149,6 +149,7 @@ def makeWorkingFolder(
             os.mkdir(moduleNameWorkPath)
         elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
             shutil.rmtree(moduleNameWorkPath)
+            os.mkdir(moduleNameWorkPath)
 
         tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
         tbModulePath = os.path.join(modulePath, tbModuleFileName)

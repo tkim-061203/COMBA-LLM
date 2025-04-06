@@ -1,0 +1,24 @@
+Please act as a professional verilog designer.
+
+{description}
+
+Module name:
+    {modulename}
+Input ports:
+    {iports}
+Output ports:
+    {oports}
+
+Parameter description:
+
+Logic description:
+Notice that below descriptions are along with keywords `sequential` and `combinational`.
+With a `combinational` logic, must construct this logic as interal wire declaration. Or this `combinational` logic can be declared as a `reg` but only be used in always(*) block.
+With a `sequential` logic, must construct this logic as `reg` declaration. Must update this logic, in an always block,  based on other `combinational` or `sequential` logic states.
+With a `sequential logic operation`, no declaration for this keyword. Just place this operation sequence in below mentioned description.
+With a `combinational logic operation`, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
+
+Implementation:
+{implementation}
+
+Give me the complete code.
