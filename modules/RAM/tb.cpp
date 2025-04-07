@@ -5,15 +5,15 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <Vcalendar__Syms.h>
+#include <VRAM__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-Vcalendar *dut = new Vcalendar;
+VRAM *dut = new VRAM;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
-#define MAX_SIM_TIME 172810
+#define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
 #define myexit(condition, content)    \
@@ -68,23 +68,31 @@ typedef struct
     uint64_t *selector;
 } latch_management;
 
-class calendarInTx
+class RAMInTx
 {
 public:
     /* TODO BEGIN 1 */
-    uint8_t CLK, RST;
+    uint8_t clk,
+        rst_n,
+
+        write_en,
+        write_addr,
+        write_data,
+
+        read_en,
+        read_addr;
     /* TODO END 1 */
 };
 
-class calendarOutTx
+class RAMOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    uint8_t Hours, Mins, Secs;
+    uint8_t read_data;
     /* TODO END 2 */
 };
 
-class calendarInternalTx
+class RAMInternalTx
 {
 public:
     /* TODO BEGIN 2 */
@@ -92,75 +100,68 @@ public:
     /* TODO END 2 */
 };
 
-calendarInTx in_tx_ref;
-calendarOutTx out_tx_ref;
-// calendarInternalTx internal_tx_ref;
+RAMInTx in_tx_ref;
+RAMOutTx out_tx_ref;
+// RAMInternalTx internal_tx_ref;
 
-class calendarScb
+class RAMScb
 {
 private:
-    std::deque<calendarInTx *> in_q;
+    std::deque<RAMInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn(calendarInTx *tx)
+    void writeIn(RAMInTx *tx)
     {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
     }
 
     // Output interface monitor port
-    void writeOut(calendarOutTx *tx)
+    void writeOut(RAMOutTx *tx)
     {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
         {
-            std::cout << "Fatal Error in calendarScb: empty calendarInTx queue" << std::endl;
+            std::cout << "Fatal Error in RAMScb: empty RAMInTx queue" << std::endl;
             exit(1);
         }
 
         // Grab the transaction item from the front of the input item queue
-        calendarInTx *in;
+        RAMInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (in->RST)
+        if (!in->rst_n)
         {
-            out_tx_ref.Hours = out_tx_ref.Mins = out_tx_ref.Secs = 0;
-            if (!(tx->Hours == 0x0 && tx->Mins == 0x0 && tx->Secs == 0x0))
+            if (!(tx->read_data == 0x0))
             {
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->RST = 0x%x", in->RST);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->Hours = 0x%x, tx->Mins = 0x%x, tx->Secs = 0x%x", tx->Hours, tx->Mins, tx->Secs);
+                printf("\r\n# TODO 3 INPUT TRACE: in->read_addr = 0x%x, in->read_en = 0x%x, in->rst_n = 0x%x, in->write_addr = 0x%x, in->write_data = 0x%x, in->write_en = 0x%x", in->read_addr, in->read_en, in->rst_n, in->write_addr, in->write_data, in->write_en);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->read_data = 0x%x", tx->read_data);
                 printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->Hours == 0x0 && tx->Mins == 0x0 && tx->Secs == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(tx->read_data == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
-        else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->CLK, combinational_logic_update) && sim_time > 2)
+        else if (in->read_en)
         {
-            out_tx_ref.Secs += 1;
-            out_tx_ref.Mins += out_tx_ref.Secs == 60;
-            out_tx_ref.Hours += out_tx_ref.Mins == 60;
-
-            out_tx_ref.Secs %= 60;
-            out_tx_ref.Mins %= 60;
-            out_tx_ref.Hours %= 24;
-
-            if (!(tx->Hours == out_tx_ref.Hours && tx->Mins == out_tx_ref.Mins && tx->Secs == out_tx_ref.Secs))
+            if (!(tx->read_data == out_tx_ref.read_data))
             {
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->RST = 0x%x", in->RST);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->Hours = 0x%x, tx->Mins = 0x%x, tx->Secs = 0x%x", tx->Hours, tx->Mins, tx->Secs);
+                printf("\r\n# TODO 3 INPUT TRACE: in->read_addr = 0x%x, in->read_en = 0x%x, in->rst_n = 0x%x, in->write_addr = 0x%x, in->write_data = 0x%x, in->write_en = 0x%x", in->read_addr, in->read_en, in->rst_n, in->write_addr, in->write_data, in->write_en);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->read_data = 0x%x", tx->read_data);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.read_data = 0x%x", out_tx_ref.read_data);
                 printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->Hours == out_tx_ref.Hours && tx->Mins == out_tx_ref.Mins && tx->Secs == out_tx_ref.Secs, "TODO 3 Failed: Counter logic result for Hours, Mins, and Secs of the Verilog module is incorrect")
+                // myexit(tx->read_data == out_tx_ref.read_data, "TODO 3 Failed: Memory logic result of the Verilog module is incorrect")
             }
         }
+
         /* TODO END 3 */
 
         delete in;
@@ -168,95 +169,148 @@ public:
     }
 };
 
-class calendarInDrv
+class RAMInDrv
 {
 private:
-    Vcalendar *dut;
+    VRAM *dut;
 
 public:
-    calendarInDrv(Vcalendar *dut)
+    RAMInDrv(VRAM *dut)
     {
         this->dut = dut;
     }
 
-    void drive(calendarInTx *tx)
+    void drive(RAMInTx *tx)
     {
         /* TODO BEGIN 4 */
         if (tx != NULL)
         {
-            dut->RST = tx->RST;
+
+            dut->read_addr = tx->read_addr;
+            dut->read_en = tx->read_en;
+            dut->write_addr = tx->write_addr;
+            dut->write_data = tx->write_data;
+            dut->write_en = tx->write_en;
+
             if (COMBINATIONAL_LOGIC_EVAL_EN)
                 dut->eval(); // combinational update
+
+            dut->rst_n = tx->rst_n;
             delete tx;
         }
         /* TODO END 4 */
 
-        dut->CLK ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
+        dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
         dut->eval(); // sequential update
     }
 };
 
-class calendarInMon
+class RAMInMon
 {
 private:
-    Vcalendar *dut;
-    calendarScb *scb;
+    VRAM *dut;
+    RAMScb *scb;
 
 public:
-    calendarInMon(Vcalendar *dut, calendarScb *scb)
+    RAMInMon(VRAM *dut, RAMScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        calendarInTx *tx = new calendarInTx();
+        RAMInTx *tx = new RAMInTx();
 
         /* TODO BEGIN 5 */
-        tx->RST = dut->RST;
+        tx->read_addr = dut->read_addr;
+        tx->read_en = dut->read_en;
+        tx->write_addr = dut->write_addr;
+        tx->write_data = dut->write_data;
+        tx->write_en = dut->write_en;
+        tx->rst_n = dut->rst_n;
         /* TODO END 5 */
 
         scb->writeIn(tx);
     }
 };
 
-class calendarOutMon
+class RAMOutMon
 {
 private:
-    Vcalendar *dut;
-    calendarScb *scb;
+    VRAM *dut;
+    RAMScb *scb;
 
 public:
-    calendarOutMon(Vcalendar *dut, calendarScb *scb)
+    RAMOutMon(VRAM *dut, RAMScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        calendarOutTx *tx = new calendarOutTx();
+        RAMOutTx *tx = new RAMOutTx();
 
         /* TODO BEGIN 6 */
-        tx->Hours = dut->Hours;
-        tx->Mins = dut->Mins;
-        tx->Secs = dut->Secs;
+        tx->read_data = dut->read_data;
         /* TODO END 6 */
 
         scb->writeOut(tx);
     }
 };
 
-calendarInTx *rndAluInTx()
+RAMInTx *rndAluInTx()
 {
-    calendarInTx *tx = new calendarInTx();
+    RAMInTx *tx = new RAMInTx();
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, !dut->CLK);
+    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update);
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->RST = 1;
+        tx->rst_n = 0;
 
     else if (sim_time >= VERIF_START_TIME)
     {
-        tx->RST = 0;
+        if (tx_data_gen_time_increase)
+            switch (tx_data_gen_time)
+            {
+            case 0:
+                in_tx_ref.rst_n = 1;
+                in_tx_ref.write_en = 0;
+                in_tx_ref.read_en = 0;
+                in_tx_ref.read_addr = in_tx_ref.write_addr = 0x3f;
+                in_tx_ref.write_data = 0;
+                break;
+            case 1:
+                in_tx_ref.read_addr++;
+                in_tx_ref.write_addr++;
+                in_tx_ref.read_addr &= 0x3f;
+                in_tx_ref.write_addr &= 0x3f;
+
+                in_tx_ref.write_en = 1;
+                in_tx_ref.read_en = 0;
+
+                in_tx_ref.write_data = out_tx_ref.read_data = rand() & 0xff;
+                break;
+            case 2:
+                in_tx_ref.write_en = 0;
+                in_tx_ref.read_en = 1;
+                break;
+            case 3:
+                tx_data_gen_time_increase = 0;
+                tx_data_gen_time = 1;
+                break;
+            default:
+
+                break;
+            }
+
+        tx->read_addr = in_tx_ref.read_addr;
+        tx->read_en = in_tx_ref.read_en;
+        tx->rst_n = in_tx_ref.rst_n;
+        tx->write_addr = in_tx_ref.write_addr;
+        tx->write_data = in_tx_ref.write_data;
+        tx->write_en = in_tx_ref.write_en;
+
+        tx_data_gen_time += tx_data_gen_time_increase;
+        tx_data_gen_time %= MAX_STAGE;
     }
     else
     {
@@ -277,13 +331,13 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    calendarInTx *tx;
+    RAMInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    calendarInDrv *drv = new calendarInDrv(dut);
-    calendarScb *scb = new calendarScb();
-    calendarInMon *inMon = new calendarInMon(dut, scb);
-    calendarOutMon *outMon = new calendarOutMon(dut, scb);
+    RAMInDrv *drv = new RAMInDrv(dut);
+    RAMScb *scb = new RAMScb();
+    RAMInMon *inMon = new RAMInMon(dut, scb);
+    RAMOutMon *outMon = new RAMOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
     while (sim_time < MAX_SIM_TIME)
@@ -305,7 +359,6 @@ int main(int argc, char **argv)
 
         // end of positive edge processing
 
-        // if (sim_time > (MAX_SIM_TIME - 20))
         m_trace->dump(sim_time);
         sim_time++;
 
