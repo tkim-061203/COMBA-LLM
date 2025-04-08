@@ -87,6 +87,21 @@
 
 - `trafic_light`: must be full-match description in output code to match low-quality testbench style and timing.
 
+- `asyn_fifo`: Instanciation names/wires must be unique:
+
+```verilog
+dual_port_RAM #(.DEPTH(DEPTH), .WIDTH(WIDTH)) ram (
+  .wclk(wclk),
+  .wenc(wenc),
+  .waddr(waddr),
+  .wdata(wdata),
+  .rclk(rclk),
+  .renc(renc),
+  .raddr(raddr),
+  .rdata(ram_rdata)
+);
+```
+
 ## 2.3.0
 
 - Module `multi_pipe_4bit` with `Testbench:` template in `design_description.txt`.

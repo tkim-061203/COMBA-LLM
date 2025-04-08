@@ -1,17 +1,15 @@
-module RAM(
+module RAM #(parameter WIDTH = 6, DEPTH = 8) (
     input wire clk,
     input wire rst_n,
     input wire write_en,
-    input wire [2:0] write_addr,
-    input wire [5:0] write_data,
+    input wire [$clog2(DEPTH)-1:0] write_addr,
+    input wire [WIDTH-1:0] write_data,
     input wire read_en,
-    input wire [2:0] read_addr,
-    output reg [5:0] read_data
+    input wire [$clog2(DEPTH)-1:0] read_addr,
+    output reg [WIDTH-1:0] read_data
 );
 
-    parameter WIDTH = 6;
-    parameter DEPTH = 8;
-
+    // Internal RAM array
     reg [WIDTH-1:0] internal_RAM [0:DEPTH-1];
 
     // Write operation
@@ -23,6 +21,7 @@ module RAM(
                 internal_RAM[i] <= {WIDTH{1'b0}};
             end
         end else if (write_en) begin
+            // Write data to the specified address
             internal_RAM[write_addr] <= write_data;
         end
     end
@@ -30,10 +29,13 @@ module RAM(
     // Read operation
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            // Reset read_data to 0
             read_data <= {WIDTH{1'b0}};
         end else if (read_en) begin
+            // Read data from the specified address
             read_data <= internal_RAM[read_addr];
         end else begin
+            // Clear read_data if read_en is not active
             read_data <= {WIDTH{1'b0}};
         end
     end

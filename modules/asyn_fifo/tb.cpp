@@ -5,12 +5,12 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <VRAM__Syms.h>
+#include <Vasyn_fifo__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-VRAM *dut = new VRAM;
+Vasyn_fifo *dut = new Vasyn_fifo;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
@@ -68,100 +68,117 @@ typedef struct
     uint64_t *selector;
 } latch_management;
 
-class RAMInTx
+class asyn_fifoInTx
 {
 public:
     /* TODO BEGIN 1 */
-    uint8_t clk,
-        rst_n,
-
-        write_en,
-        write_addr,
-        write_data,
-
-        read_en,
-        read_addr;
+    uint8_t wclk,
+        rclk,
+        wrstn,
+        rrstn,
+        winc,
+        rinc,
+        wdata;
     /* TODO END 1 */
 };
 
-class RAMOutTx
+class asyn_fifoOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    uint8_t read_data;
+    uint8_t wfull,
+        rempty,
+        rdata;
     /* TODO END 2 */
 };
 
-class RAMInternalTx
+class asyn_fifoInternalTx
 {
 public:
     /* TODO BEGIN 2 */
-    uint8_t a0;
+    uint8_t RAM[16];
+    uint8_t addr;
     /* TODO END 2 */
 };
 
-RAMInTx in_tx_ref;
-RAMOutTx out_tx_ref;
-// RAMInternalTx internal_tx_ref;
+asyn_fifoInTx in_tx_ref;
+// asyn_fifoOutTx out_tx_ref;
+asyn_fifoInternalTx internal_tx_ref;
 
-class RAMScb
+class asyn_fifoScb
 {
 private:
-    std::deque<RAMInTx *> in_q;
+    std::deque<asyn_fifoInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn(RAMInTx *tx)
+    void writeIn(asyn_fifoInTx *tx)
     {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
     }
 
     // Output interface monitor port
-    void writeOut(RAMOutTx *tx)
+    void writeOut(asyn_fifoOutTx *tx)
     {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
         {
-            std::cout << "Fatal Error in RAMScb: empty RAMInTx queue" << std::endl;
+            std::cout << "Fatal Error in asyn_fifoScb: empty asyn_fifoInTx queue" << std::endl;
             exit(1);
         }
 
         // Grab the transaction item from the front of the input item queue
-        RAMInTx *in;
+        asyn_fifoInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (!in->rst_n)
+        if (!in->wrstn && !in->rrstn)
         {
-            if (!(tx->read_data == 0x0))
+            if (!(tx->rempty == 0x1 && tx->wfull == 0x0))
             {
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->read_addr = 0x%x, in->read_en = 0x%x, in->rst_n = 0x%x, in->write_addr = 0x%x, in->write_data = 0x%x, in->write_en = 0x%x", in->read_addr, in->read_en, in->rst_n, in->write_addr, in->write_data, in->write_en);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->read_data = 0x%x", tx->read_data);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
                 printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->read_data == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(tx->rempty == 0x1 && tx->wfull == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
-        else if (in->read_en)
+        else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->wclk, combinational_logic_update))
         {
-            if (!(tx->read_data == out_tx_ref.read_data))
+            if (tx_data_gen_time == 3)
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->read_addr = 0x%x, in->read_en = 0x%x, in->rst_n = 0x%x, in->write_addr = 0x%x, in->write_data = 0x%x, in->write_en = 0x%x", in->read_addr, in->read_en, in->rst_n, in->write_addr, in->write_data, in->write_en);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->read_data = 0x%x", tx->read_data);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.read_data = 0x%x", out_tx_ref.read_data);
-                printf("\r\n");
-                fflush(stdout);
+                if (!(tx->rempty == 0x0 && tx->wfull == 0x1))
+                {
+                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    printf("\r\n");
+                    fflush(stdout);
 
-                myexit(tx->read_data == out_tx_ref.read_data, "TODO 3 Failed: Memory logic result of the Verilog module is incorrect")
+                    myexit(tx->rempty == 0x0 && tx->wfull == 0x1, "TODO 3 Failed: wfull logic result of the Verilog module is incorrect")
+                }
+            }
+            else if (tx_data_gen_time == 11 && IS_SEQUENTIAL_LOGIC_EVAL(dut->rclk, combinational_logic_update))
+            {
+                if (!(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr]))
+                {
+                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    printf("\r\n");
+                    fflush(stdout);
+
+                    myexit(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr], "TODO 3 Failed: rdata logic result of the Verilog module is incorrect")
+                }
             }
         }
-
         /* TODO END 3 */
 
         delete in;
@@ -169,145 +186,159 @@ public:
     }
 };
 
-class RAMInDrv
+class asyn_fifoInDrv
 {
 private:
-    VRAM *dut;
+    Vasyn_fifo *dut;
 
 public:
-    RAMInDrv(VRAM *dut)
+    asyn_fifoInDrv(Vasyn_fifo *dut)
     {
         this->dut = dut;
     }
 
-    void drive(RAMInTx *tx)
+    void drive(asyn_fifoInTx *tx)
     {
         /* TODO BEGIN 4 */
         if (tx != NULL)
         {
-
-            dut->read_addr = tx->read_addr;
-            dut->read_en = tx->read_en;
-            dut->write_addr = tx->write_addr;
-            dut->write_data = tx->write_data;
-            dut->write_en = tx->write_en;
-
+            dut->rinc = tx->rinc;
+            dut->wdata = tx->wdata;
+            dut->winc = tx->winc;
             if (COMBINATIONAL_LOGIC_EVAL_EN)
                 dut->eval(); // combinational update
-
-            dut->rst_n = tx->rst_n;
+            dut->wrstn = tx->wrstn;
+            dut->rrstn = tx->rrstn;
             delete tx;
         }
         /* TODO END 4 */
 
-        dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
+        dut->wclk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
+
+        if (IS_SEQUENTIAL_LOGIC_EVAL(dut->wclk, combinational_logic_update))
+            dut->rclk ^= 1;
+
         dut->eval(); // sequential update
     }
 };
 
-class RAMInMon
+class asyn_fifoInMon
 {
 private:
-    VRAM *dut;
-    RAMScb *scb;
+    Vasyn_fifo *dut;
+    asyn_fifoScb *scb;
 
 public:
-    RAMInMon(VRAM *dut, RAMScb *scb)
+    asyn_fifoInMon(Vasyn_fifo *dut, asyn_fifoScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        RAMInTx *tx = new RAMInTx();
+        asyn_fifoInTx *tx = new asyn_fifoInTx();
 
         /* TODO BEGIN 5 */
-        tx->read_addr = dut->read_addr;
-        tx->read_en = dut->read_en;
-        tx->write_addr = dut->write_addr;
-        tx->write_data = dut->write_data;
-        tx->write_en = dut->write_en;
-        tx->rst_n = dut->rst_n;
+        tx->rinc = dut->rinc;
+        tx->rrstn = dut->rrstn;
+        tx->wdata = dut->wdata;
+        tx->winc = dut->winc;
+        tx->wrstn = dut->wrstn;
         /* TODO END 5 */
 
         scb->writeIn(tx);
     }
 };
 
-class RAMOutMon
+class asyn_fifoOutMon
 {
 private:
-    VRAM *dut;
-    RAMScb *scb;
+    Vasyn_fifo *dut;
+    asyn_fifoScb *scb;
 
 public:
-    RAMOutMon(VRAM *dut, RAMScb *scb)
+    asyn_fifoOutMon(Vasyn_fifo *dut, asyn_fifoScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        RAMOutTx *tx = new RAMOutTx();
+        asyn_fifoOutTx *tx = new asyn_fifoOutTx();
 
         /* TODO BEGIN 6 */
-        tx->read_data = dut->read_data;
+        tx->rdata = dut->rdata;
+        tx->rempty = dut->rempty;
+        tx->wfull = dut->wfull;
         /* TODO END 6 */
 
         scb->writeOut(tx);
     }
 };
 
-RAMInTx *rndAluInTx()
+asyn_fifoInTx *rndAluInTx()
 {
-    RAMInTx *tx = new RAMInTx();
+    asyn_fifoInTx *tx = new asyn_fifoInTx();
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update);
+    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->wclk, combinational_logic_update);
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst_n = 0;
+    {
+        tx->rrstn = tx->wrstn = 0;
+    }
 
     else if (sim_time >= VERIF_START_TIME)
     {
+        // printf("\r\nsim_time = %ld, tx_data_gen_time = %ld, tx_data_gen_time_increase = %d", sim_time, tx_data_gen_time, tx_data_gen_time_increase);
         if (tx_data_gen_time_increase)
             switch (tx_data_gen_time)
             {
             case 0:
-                in_tx_ref.rst_n = 1;
-                in_tx_ref.write_en = 0;
-                in_tx_ref.read_en = 0;
-                in_tx_ref.read_addr = in_tx_ref.write_addr = 0x7;
-                in_tx_ref.write_data = 0;
-                break;
+                in_tx_ref.rrstn = in_tx_ref.wrstn = 1;
+                in_tx_ref.winc = in_tx_ref.rinc = 0;
             case 1:
-                in_tx_ref.read_addr++;
-                in_tx_ref.write_addr++;
-                in_tx_ref.read_addr &= 0x7;
-                in_tx_ref.write_addr &= 0x7;
+                in_tx_ref.winc = 1;
+                in_tx_ref.wdata = internal_tx_ref.RAM[internal_tx_ref.addr++] = rand() & 0xff;
+                internal_tx_ref.addr &= internal_tx_ref.addr & 0xf;
 
-                in_tx_ref.write_en = 1;
-                in_tx_ref.read_en = 0;
-
-                in_tx_ref.write_data = out_tx_ref.read_data = rand() & 0x3f;
+                tx_data_gen_time = 1;
+                tx_data_gen_time_increase = (internal_tx_ref.addr == 0);
                 break;
             case 2:
-                in_tx_ref.write_en = 0;
-                in_tx_ref.read_en = 1;
+                in_tx_ref.winc = 0;
                 break;
-            case 3:
-                tx_data_gen_time_increase = 0;
-                tx_data_gen_time = 1;
+            case 10:
+                in_tx_ref.rinc = 1;
                 break;
-            default:
+            case 11:
+                if (IS_SEQUENTIAL_LOGIC_EVAL(!dut->rclk, combinational_logic_update))
+                {
+                    internal_tx_ref.addr++;
+                    internal_tx_ref.addr &= internal_tx_ref.addr & 0xf;
+                    tx_data_gen_time_increase = (internal_tx_ref.addr == 0);
+                }
+                else
+                {
+                    tx_data_gen_time_increase = 0;
+                }
+                tx_data_gen_time = 11;
 
+                break;
+            case 12:
+                in_tx_ref.rinc = 0;
+                break;
+            case 20:
+                in_tx_ref.rrstn = in_tx_ref.wrstn = 0;
+                tx_data_gen_time = 0;
+                tx_data_gen_time_increase = 0;
+            default:
                 break;
             }
 
-        tx->read_addr = in_tx_ref.read_addr;
-        tx->read_en = in_tx_ref.read_en;
-        tx->rst_n = in_tx_ref.rst_n;
-        tx->write_addr = in_tx_ref.write_addr;
-        tx->write_data = in_tx_ref.write_data;
-        tx->write_en = in_tx_ref.write_en;
+        tx->rinc = in_tx_ref.rinc;
+        tx->rrstn = in_tx_ref.rrstn;
+        tx->wdata = in_tx_ref.wdata;
+        tx->winc = in_tx_ref.winc;
+        tx->wrstn = in_tx_ref.wrstn;
 
         tx_data_gen_time += tx_data_gen_time_increase;
         tx_data_gen_time %= MAX_STAGE;
@@ -331,13 +362,13 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    RAMInTx *tx;
+    asyn_fifoInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    RAMInDrv *drv = new RAMInDrv(dut);
-    RAMScb *scb = new RAMScb();
-    RAMInMon *inMon = new RAMInMon(dut, scb);
-    RAMOutMon *outMon = new RAMOutMon(dut, scb);
+    asyn_fifoInDrv *drv = new asyn_fifoInDrv(dut);
+    asyn_fifoScb *scb = new asyn_fifoScb();
+    asyn_fifoInMon *inMon = new asyn_fifoInMon(dut, scb);
+    asyn_fifoOutMon *outMon = new asyn_fifoOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
     while (sim_time < MAX_SIM_TIME)
