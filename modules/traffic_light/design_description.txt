@@ -13,21 +13,29 @@ Output ports:
     clock[7:0]: An 8-bit output representing the count value of the internal counter.
     red, yellow, green: Output signals representing the state of the traffic lights.
 
+Parameter Description:
+- idle: 0. IDLE state
+- s1_red: 1. Red light state
+- s2_yellow: 2. Yellow light state
+- s3_green: 3. Green light state
+
+Logic description:
+Notice that below descriptions are along with keywords `sequential` and `combinational`.
+With a `combinational` logic, must construct this logic as interal wire declaration. Or this `combinational` logic can be declared as a `reg` but only be used in always(*) block.
+With a `sequential` logic, must construct this logic as `reg` declaration. Must update this logic, in an always block,  based on other `combinational` or `sequential` logic states.
+With a `sequential logic operation`, no declaration for this keyword. Just place this operation sequence in below mentioned description.
+With a `combinational logic operation`, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
+- cnt: `sequential logic`. Internal counter. If `rst_n` is deactive, `cnt` is 10 decimal. Otherwise, if `pass_request` is active and `green` is active and `cnt` is greater than 10, `cnt` is 10 decimal. Otherwise, if `green` is deactive and `p_green` is active, `cnt` is 60 decimal. Otherwise, if `yellow` is deactive and `p_yellow` is active, `cnt` is 5 decimal. Otherwise, if `red` is deactive and `p_red` is active, `cnt` is 10 decimal. Otherwise, `cnt` is decremented by 1 on every positive edge of the clock.
+- state: `sequential logic`. If `rst_n` is deactive, `state` is `idle`. Otherwise, in case `state` is `idle`, `state` is `s1_red`. In case `state` is `s1_red`, if `cnt` counts to 3 decimal, `state` is `s3_green`, else `state` is `s1_red`. In case `state` is `s2_yellow`, if `cnt` counts to 3 decimal, `state` is `s1_red`, else `state` is `s2_yellow`. In case `state` is `s3_green`, if `cnt` counts to 3 decimal, `state` is `s2_yellow`, else `state` is `s3_green`.
+- p_red, p_green, p_yellow: sequential logic. If `rst_n` is deactive, `p_red`, `p_green`, and `p_yellow` is reset to 0. Otherwise, `red` is set to 1 if `state` is `s1_red`, `yellow` is set to 1 if `state` is `s2_yellow`, and green is set to 1 if `state` is `s3_green`.
+- red, green, yellow: sequential logic. If `rst_n` is deactive, `red`, `green`, and `yellow` is reset to 0. Otherwise, `red` is set to `p_red`, `yellow` is set to `p_yellow`, and green is set to `p_green`.
+
 Implementation:
 The following is the design track we recommend:
-The first always block is responsible for the state transition logic. It uses a case statement to handle different states. Here's a summary of each state:
-idle: Initial state where all signals are set to 0. Transition to s1_red state occurs immediately.
-s1_red: Sets the red signal to 1 and waits for a count of 3 before transitioning to s3_green state. Otherwise, it remains in s1_red state.
-s2_yellow: Sets the yellow signal to 1 and waits for a count of 3 before transitioning to s1_red state. Otherwise, it remains in s2_yellow state.
-s3_green: Sets the green signal to 1 and waits for a count of 3 before transitioning to s2_yellow state. Otherwise, it remains in s3_green state.
-The second always block handles the counting logic of the internal counter (cnt). The counter is decremented by 1 on every positive edge of the clock or negative edge of the reset signal. The counter values are adjusted based on various conditions:
-If (!rst_n), the counter is set to 10.
-If the pass_request signal is active and the green signal is active, the counter is set to 10.
-If the green signal is inactive and the previous green signal (p_green) was active, the counter is set to 60.
-If the yellow signal is inactive and the previous yellow signal (p_yellow) was active, the counter is set to 5.
-If the red signal is inactive and the previous red signal (p_red) was active, the counter is set to 10.
-Otherwise, the counter is decremented normally.
+The first always block is responsible for the state transition logic, based on description of sequential logic `state`. Notice that the the `state` only change when the counter `cnt` reaches 3 decimal.
+The second always block is responsible for internal counter `cnt` logic.
 The assign statement assigns the value of the internal counter (cnt) to the output clock.
 The final always block handles the output signals. It assigns the previous values (p_red, p_yellow, p_green) to the output signals (red, yellow, green) on the positive edge of the clock or negative edge of the reset signal.
+Notice to handle `sequencial logic` for `state` and `cnt` correctly.
 
 Give me the complete code.

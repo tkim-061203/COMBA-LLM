@@ -1,8 +1,22 @@
 # Rework 3.0: Waveform Testbench based on VCD Generation from Verilator
 
+## Target
+
+- Testbench Procedure based on VCD Waveform Analysis. Pyhon program for Binary Waveform Analysis.
+
+## Limit
+
+- Cannot perform VCD Waveform Analysis at glance.
+
 ## 3.0.0
 
 - [vcdvcd](https://github.com/cirosantilli/vcdvcd) Lib.
+- Waveform Generation from C/C++ Reference Model of Verilator.
+- Waveform Testbench from Python-based Program.
+
+### Phase 1: test code in run.ipynb
+
+-
 
 # Rework 2.0: Langraph
 
@@ -70,6 +84,23 @@
 
 > [!NOTE]
 > Note combinatorial logic is not computed before sequential always blocks are computed (for speed reasons). Therefore it is best to set any **non-clock inputs up with a separate eval()** call before changing clocks.
+
+- `trafic_light`: must be full-match description in output code to match low-quality testbench style and timing.
+
+- `asyn_fifo`: Instanciation names/wires must be unique:
+
+```verilog
+dual_port_RAM #(.DEPTH(DEPTH), .WIDTH(WIDTH)) ram (
+  .wclk(wclk),
+  .wenc(wenc),
+  .waddr(waddr),
+  .wdata(wdata),
+  .rclk(rclk),
+  .renc(renc),
+  .raddr(raddr),
+  .rdata(ram_rdata)
+);
+```
 
 ## 2.3.0
 

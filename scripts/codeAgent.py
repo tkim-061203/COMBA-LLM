@@ -224,7 +224,7 @@ class LLMCodeAgent:
         self,
         state: State,
     ):
-
+        print("route_compile state: tb_failed: ", state['tb_failed'], ", exception:", state["exception"])
         route_compile_yn = (
             "n" if self.is_verified_flow else input("Route compile (y/n): ")
         )
@@ -326,7 +326,7 @@ class LLMCodeAgent:
             additionContent = {"exceptionTitleAdditionContent": ""}
             # ask for addition of the warning and update warning description
             if (firstWarning["exceptionTitle"] not in self._verilator_warns) and (
-                firstWarning["exceptionTitle"] != "None"
+                firstWarning["exceptionTitle"] != "None" or firstWarning["exceptionTitle"] != None
             ):
                 print("firstWarning", firstWarning)
                 if (
@@ -415,6 +415,7 @@ The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO E
 
 The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
+The trace values of the expected outputs must be: {refOutputTrace}
 """.format(
                 **tb_failed
             )
@@ -460,14 +461,14 @@ Here are the content of the testbench code:
             todoNum = failedDetectMatchDict["todoNum"]
 
             ioTraceRegex = re.compile(
-                r"#\sTODO\s[0-9]*\s(INPUT|OUTPUT)\sTRACE:\s(?P<traceContent>.*)"
+                r"#\sTODO\s[0-9]*\s(REFERENCE\s)?(INPUT|OUTPUT)\sTRACE:\s(?P<traceContent>.*)"
             )
             ioTraceMatches = [
                 ioTraceMatch.groupdict() for ioTraceMatch in ioTraceRegex.finditer(log)
             ]
             inputTraceContent = ioTraceMatches[0]["traceContent"]
             outputTraceContent = ioTraceMatches[1]["traceContent"]
-
+            refOutputTraceContent = ioTraceMatches[2]["traceContent"]
             failureContentRegex = re.compile(
                 r"Assertion\s`.*\"TODO\s[0-9]*\sFailed:\s(?P<failureContent>.*)"
             )
@@ -483,6 +484,7 @@ Here are the content of the testbench code:
                 "inputTrace": inputTraceContent,
                 "outputTrace": outputTraceContent,
                 "failureContent": failureContent,
+                "refOutputTrace": refOutputTraceContent
             }
         return {}
 
@@ -707,7 +709,7 @@ Here are the content of the testbench code:
                 os.mkdir(cur_report_path)
             # save report.json
             with open(
-                os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w+"
+                os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w"
             ) as outfile:
                 json.dump(json_dumps_report, outfile)
 
@@ -738,6 +740,10 @@ Here are the content of the testbench code:
                 for tb_pass in json_dumps_report["tb_failed_trial"]
             ]
         )
+
+        
+        # debug
+        print("### exception and tb trials:", json_dumps_report["exception_trial"], json_dumps_report["tb_failed_trial"])
 
         print("### Result iter times: ", self._iteration_time)
         print("\t", f"{count_excep_pass}/5 Exception pass")

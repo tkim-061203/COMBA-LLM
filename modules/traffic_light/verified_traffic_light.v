@@ -79,7 +79,8 @@ always @(posedge clk or negedge rst_n)
 		else if (!red&&p_red)
 			cnt <= 8'd10;	
 		else cnt <= cnt -1;
- assign clock = cnt;
+
+assign clock = cnt;
 
 always @(posedge clk or negedge rst_n) 
         if(!rst_n)

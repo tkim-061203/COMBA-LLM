@@ -5,17 +5,17 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <Vtraffic_light__Syms.h>
+#include <Vasyn_fifo__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-Vtraffic_light *dut = new Vtraffic_light;
+Vasyn_fifo *dut = new Vasyn_fifo;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
-#define MAX_SIM_TIME 400
+#define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define MAX_STAGE 200
+#define MAX_STAGE 100
 #define myexit(condition, content)    \
     {                                 \
         assert(condition && content); \
@@ -60,12 +60,7 @@ vluint8_t combinational_logic_update = COMBINATIONAL_LOGIC_EVAL_EN;
     }
 #define LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm) (lm.selector = &lm.latch_state)
 #define LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm) (lm.selector = &lm.after_latch_state)
-#define LATCH_MANAGEMENT_LATCH_ASSIGN(lm, x) (lm.latch_state = x)
-#define LATCH_MANAGEMENT_LATCH_UPDATE(lm) (lm.latch_state = lm.after_latch_state)
-#define LATCH_MANAGEMENT_AFTER_LATCH_ASSIGN(lm, x) (lm.after_latch_state = x)
-#define LATCH_MANAGEMENT_IS_RISING_EDGE(lm) (!lm.latch_state && lm.after_latch_state)
-#define LATCH_MANAGEMENT_IS_FALLING_EDGE(lm) (lm.latch_state && !lm.after_latch_state)
-
+#define LATCH_MANAGEMENT_LATCH_ASSIGN(lm, x) (lm.latch_state = lm.after_latch_state)
 typedef struct
 {
     uint64_t latch_state;
@@ -73,145 +68,115 @@ typedef struct
     uint64_t *selector;
 } latch_management;
 
-latch_management red_latch_management, green_latch_management, yellow_latch_management;
-
-class traffic_lightInTx
+class asyn_fifoInTx
 {
 public:
     /* TODO BEGIN 1 */
-    uint8_t rst_n,
-        pass_request;
+    uint8_t wclk,
+        rclk,
+        wrstn,
+        rrstn,
+        winc,
+        rinc,
+        wdata;
     /* TODO END 1 */
 };
 
-class traffic_lightOutTx
+class asyn_fifoOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    uint8_t clock,
-        red,
-        yellow, green;
+    uint8_t wfull,
+        rempty,
+        rdata;
     /* TODO END 2 */
 };
 
-class traffic_lightInternalTx
+class asyn_fifoInternalTx
 {
 public:
     /* TODO BEGIN 2 */
-    uint8_t a0;
+    uint8_t RAM[16];
+    uint8_t addr;
     /* TODO END 2 */
 };
 
-traffic_lightInTx in_tx_ref;
-traffic_lightOutTx out_tx_ref;
-traffic_lightInternalTx internal_tx_ref;
+asyn_fifoInTx in_tx_ref;
+// asyn_fifoOutTx out_tx_ref;
+asyn_fifoInternalTx internal_tx_ref;
 
-class traffic_lightScb
+class asyn_fifoScb
 {
 private:
-    std::deque<traffic_lightInTx *> in_q;
+    std::deque<asyn_fifoInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn(traffic_lightInTx *tx)
+    void writeIn(asyn_fifoInTx *tx)
     {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
     }
 
     // Output interface monitor port
-    void writeOut(traffic_lightOutTx *tx)
+    void writeOut(asyn_fifoOutTx *tx)
     {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
         {
-            std::cout << "Fatal Error in traffic_lightScb: empty traffic_lightInTx queue" << std::endl;
+            std::cout << "Fatal Error in asyn_fifoScb: empty asyn_fifoInTx queue" << std::endl;
             exit(1);
         }
 
         // Grab the transaction item from the front of the input item queue
-        traffic_lightInTx *in;
+        asyn_fifoInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        if (!in->rst_n && sim_time >= 2)
+        if (!in->wrstn && !in->rrstn)
         {
-            if (!(tx->clock == 0xA && tx->green == 0x0 && tx->red == 0x0 && tx->yellow == 0x0))
+            if (!(tx->rempty == 0x1 && tx->wfull == 0x0))
             {
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
                 printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->clock == 0x0 && tx->green == 0x0 && tx->red == 0x0 && tx->yellow == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(tx->rempty == 0x1 && tx->wfull == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
-        else if (IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update))
+        else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->wclk, combinational_logic_update))
         {
-            LATCH_MANAGEMENT_LATCH_UPDATE(red_latch_management);
-            LATCH_MANAGEMENT_LATCH_UPDATE(green_latch_management);
-            LATCH_MANAGEMENT_LATCH_UPDATE(yellow_latch_management);
-
-            LATCH_MANAGEMENT_AFTER_LATCH_ASSIGN(red_latch_management, tx->red);
-            LATCH_MANAGEMENT_AFTER_LATCH_ASSIGN(green_latch_management, tx->green);
-            LATCH_MANAGEMENT_AFTER_LATCH_ASSIGN(yellow_latch_management, tx->yellow);
-
-            switch (tx_data_gen_time)
+            if (tx_data_gen_time == 3)
             {
-            case 3:
-                if (!(tx->clock == 0xA && LATCH_MANAGEMENT_IS_RISING_EDGE(red_latch_management)))
+                if (!(tx->rempty == 0x0 && tx->wfull == 0x1))
                 {
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
                     printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0xA && LATCH_MANAGEMENT_IS_RISING_EDGE(red_latch_management), "TODO 3 Failed: Red Output logic result of the Verilog module is incorrect")
+                    myexit(tx->rempty == 0x0 && tx->wfull == 0x1, "TODO 3 Failed: wfull logic result of the Verilog module is incorrect")
                 }
-                break;
-            case 13:
-                if (!(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(red_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(green_latch_management)))
+            }
+            else if (tx_data_gen_time == 11 && IS_SEQUENTIAL_LOGIC_EVAL(dut->rclk, combinational_logic_update))
+            {
+                if (!(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr]))
                 {
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
                     printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(red_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(green_latch_management), "TODO 3 Failed: Green Output logic result of the Verilog module is incorrect")
+                    myexit(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr], "TODO 3 Failed: rdata logic result of the Verilog module is incorrect")
                 }
-                break;
-            case 73:
-                if (!(tx->clock == 0x5 && LATCH_MANAGEMENT_IS_FALLING_EDGE(green_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(yellow_latch_management)))
-                {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n");
-                    fflush(stdout);
-
-                    myexit(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(green_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(yellow_latch_management), "TODO 3 Failed: Yellow Output logic result of the Verilog module is incorrect")
-                }
-                break;
-            case 135:
-                if (!(tx->clock == 0xA && tx->green))
-                {
-                    printf("\r\n# TODO 3 NO Failed at simtime %ld %ld", sim_time, tx_data_gen_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n");
-                    fflush(stdout);
-
-                    myexit(tx->clock == 0xA && tx->green, "TODO 3 Failed: pass_request logic result of the Verilog module is incorrect")
-                }
-                break;
-
-            default:
-                break;
             }
         }
         /* TODO END 3 */
@@ -221,121 +186,159 @@ public:
     }
 };
 
-class traffic_lightInDrv
+class asyn_fifoInDrv
 {
 private:
-    Vtraffic_light *dut;
+    Vasyn_fifo *dut;
 
 public:
-    traffic_lightInDrv(Vtraffic_light *dut)
+    asyn_fifoInDrv(Vasyn_fifo *dut)
     {
         this->dut = dut;
     }
 
-    void drive(traffic_lightInTx *tx)
+    void drive(asyn_fifoInTx *tx)
     {
         /* TODO BEGIN 4 */
         if (tx != NULL)
         {
-            dut->pass_request = tx->pass_request;
+            dut->rinc = tx->rinc;
+            dut->wdata = tx->wdata;
+            dut->winc = tx->winc;
             if (COMBINATIONAL_LOGIC_EVAL_EN)
                 dut->eval(); // combinational update
-            dut->rst_n = tx->rst_n;
+            dut->wrstn = tx->wrstn;
+            dut->rrstn = tx->rrstn;
             delete tx;
         }
         /* TODO END 4 */
 
-        dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
+        dut->wclk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
+
+        if (IS_SEQUENTIAL_LOGIC_EVAL(dut->wclk, combinational_logic_update))
+            dut->rclk ^= 1;
+
         dut->eval(); // sequential update
     }
 };
 
-class traffic_lightInMon
+class asyn_fifoInMon
 {
 private:
-    Vtraffic_light *dut;
-    traffic_lightScb *scb;
+    Vasyn_fifo *dut;
+    asyn_fifoScb *scb;
 
 public:
-    traffic_lightInMon(Vtraffic_light *dut, traffic_lightScb *scb)
+    asyn_fifoInMon(Vasyn_fifo *dut, asyn_fifoScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        traffic_lightInTx *tx = new traffic_lightInTx();
+        asyn_fifoInTx *tx = new asyn_fifoInTx();
 
         /* TODO BEGIN 5 */
-        tx->pass_request = dut->pass_request;
-        tx->rst_n = dut->rst_n;
+        tx->rinc = dut->rinc;
+        tx->rrstn = dut->rrstn;
+        tx->wdata = dut->wdata;
+        tx->winc = dut->winc;
+        tx->wrstn = dut->wrstn;
         /* TODO END 5 */
 
         scb->writeIn(tx);
     }
 };
 
-class traffic_lightOutMon
+class asyn_fifoOutMon
 {
 private:
-    Vtraffic_light *dut;
-    traffic_lightScb *scb;
+    Vasyn_fifo *dut;
+    asyn_fifoScb *scb;
 
 public:
-    traffic_lightOutMon(Vtraffic_light *dut, traffic_lightScb *scb)
+    asyn_fifoOutMon(Vasyn_fifo *dut, asyn_fifoScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        traffic_lightOutTx *tx = new traffic_lightOutTx();
+        asyn_fifoOutTx *tx = new asyn_fifoOutTx();
 
         /* TODO BEGIN 6 */
-        tx->clock = dut->clock;
-        tx->green = dut->green;
-        tx->red = dut->red;
-        tx->yellow = dut->yellow;
+        tx->rdata = dut->rdata;
+        tx->rempty = dut->rempty;
+        tx->wfull = dut->wfull;
         /* TODO END 6 */
 
         scb->writeOut(tx);
     }
 };
 
-traffic_lightInTx *rndAluInTx()
+asyn_fifoInTx *rndAluInTx()
 {
-    traffic_lightInTx *tx = new traffic_lightInTx();
+    asyn_fifoInTx *tx = new asyn_fifoInTx();
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update);
-
+    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->wclk, combinational_logic_update);
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst_n = 0;
+    {
+        tx->rrstn = tx->wrstn = 0;
+    }
 
     else if (sim_time >= VERIF_START_TIME)
     {
+        // printf("\r\nsim_time = %ld, tx_data_gen_time = %ld, tx_data_gen_time_increase = %d", sim_time, tx_data_gen_time, tx_data_gen_time_increase);
         if (tx_data_gen_time_increase)
-        {
             switch (tx_data_gen_time)
             {
             case 0:
-                in_tx_ref.rst_n = 1;
-                in_tx_ref.pass_request = 0;
-                break;
-            case 134:
-                in_tx_ref.pass_request = 1;
-                break;
-            case 135:
-                in_tx_ref.rst_n = 0;
-                tx_data_gen_time = tx_data_gen_time_increase = 0;
-                break;
+                in_tx_ref.rrstn = in_tx_ref.wrstn = 1;
+                in_tx_ref.winc = in_tx_ref.rinc = 0;
+            case 1:
+                in_tx_ref.winc = 1;
+                in_tx_ref.wdata = internal_tx_ref.RAM[internal_tx_ref.addr++] = rand() & 0xff;
+                internal_tx_ref.addr &= internal_tx_ref.addr & 0xf;
 
+                tx_data_gen_time = 1;
+                tx_data_gen_time_increase = (internal_tx_ref.addr == 0);
+                break;
+            case 2:
+                in_tx_ref.winc = 0;
+                break;
+            case 10:
+                in_tx_ref.rinc = 1;
+                break;
+            case 11:
+                if (IS_SEQUENTIAL_LOGIC_EVAL(!dut->rclk, combinational_logic_update))
+                {
+                    internal_tx_ref.addr++;
+                    internal_tx_ref.addr &= internal_tx_ref.addr & 0xf;
+                    tx_data_gen_time_increase = (internal_tx_ref.addr == 0);
+                }
+                else
+                {
+                    tx_data_gen_time_increase = 0;
+                }
+                tx_data_gen_time = 11;
+
+                break;
+            case 12:
+                in_tx_ref.rinc = 0;
+                break;
+            case 20:
+                in_tx_ref.rrstn = in_tx_ref.wrstn = 0;
+                tx_data_gen_time = 0;
+                tx_data_gen_time_increase = 0;
             default:
-
                 break;
             }
-        }
-        tx->pass_request = in_tx_ref.pass_request;
-        tx->rst_n = in_tx_ref.rst_n;
+
+        tx->rinc = in_tx_ref.rinc;
+        tx->rrstn = in_tx_ref.rrstn;
+        tx->wdata = in_tx_ref.wdata;
+        tx->winc = in_tx_ref.winc;
+        tx->wrstn = in_tx_ref.wrstn;
 
         tx_data_gen_time += tx_data_gen_time_increase;
         tx_data_gen_time %= MAX_STAGE;
@@ -359,13 +362,13 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    traffic_lightInTx *tx;
+    asyn_fifoInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    traffic_lightInDrv *drv = new traffic_lightInDrv(dut);
-    traffic_lightScb *scb = new traffic_lightScb();
-    traffic_lightInMon *inMon = new traffic_lightInMon(dut, scb);
-    traffic_lightOutMon *outMon = new traffic_lightOutMon(dut, scb);
+    asyn_fifoInDrv *drv = new asyn_fifoInDrv(dut);
+    asyn_fifoScb *scb = new asyn_fifoScb();
+    asyn_fifoInMon *inMon = new asyn_fifoInMon(dut, scb);
+    asyn_fifoOutMon *outMon = new asyn_fifoOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
     while (sim_time < MAX_SIM_TIME)
