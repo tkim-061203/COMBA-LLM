@@ -15,16 +15,16 @@ endmodule
 module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (input wclk, input rclk, input wrstn, input rrstn, input winc, input rinc, input [WIDTH-1:0] wdata, output reg wfull, output reg rempty, output reg [WIDTH-1:0] rdata);
     localparam ADDR_WIDTH = $clog2(DEPTH);
     reg [ADDR_WIDTH:0] raddr_bin;
-    wire [ADDR_WIDTH-1:0] raddr_gray;
     reg [ADDR_WIDTH:0] rptr;
     reg [ADDR_WIDTH:0] rptr_buff;
     reg [ADDR_WIDTH:0] rptr_syn;
-    wire ren;
     reg [ADDR_WIDTH:0] waddr_bin;
-    wire [ADDR_WIDTH-1:0] waddr_gray;
     reg [ADDR_WIDTH:0] wptr;
     reg [ADDR_WIDTH:0] wptr_buff;
     reg [ADDR_WIDTH:0] wptr_syn;
+    wire [ADDR_WIDTH:0] raddr_gray;
+    wire [ADDR_WIDTH:0] waddr_gray;
+    wire ren;
     wire wen;
 
     // Sequential Logic for Read Address
@@ -92,7 +92,7 @@ module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (input wclk, input
 
     // Combinational Logic for Write Full Signal
     always @(*) begin
-        wfull = (wptr == {~rptr_syn[ADDR_WIDTH:ADDR_WIDTH-2], rptr_syn[ADDR_WIDTH-3:0]});
+        wfull = (wptr[ADDR_WIDTH:ADDR_WIDTH-2] == ~rptr_syn[ADDR_WIDTH:ADDR_WIDTH-2]) && (wptr[ADDR_WIDTH-3:0] == rptr_syn[ADDR_WIDTH-3:0]);
     end
 
     // Sequential Logic for Write Pointer Buffer

@@ -5,20 +5,20 @@
 #include <time.h>
 #include <cmath>
 #include <iostream>
-#include <VALU__Syms.h>
+#include <Vpe__Syms.h>
 #include <assert.h>
 
 using namespace std;
 
-VALU *dut = new VALU;
+Vpe *dut = new Vpe;
 
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -47,7 +47,7 @@ vluint8_t combinational_logic_update = COMBINATIONAL_LOGIC_EVAL_EN;
             LATCH_MANAGEMENT_SELECTOR_TO_LATCH(lm);                                                        \
             LATCH_MANAGEMENT_LATCH_ASSIGN(lm, lm.after_latch_state);                                       \
             statement1                                                                                     \
-        }                                                                                                 \
+        }                                                                                                  \
         else                                                                                               \
         {                                                                                                  \
             LATCH_MANAGEMENT_SELECTOR_TO_AFTER_LATCH(lm);                                                  \
@@ -68,23 +68,24 @@ typedef struct
     uint64_t *selector;
 } latch_management;
 
-class ALUInTx
+class peInTx
 {
 public:
     /* TODO BEGIN 1 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint8_t rst;
+    uint32_t a, b;
     /* TODO END 1 */
 };
 
-class ALUOutTx
+class peOutTx
 {
 public:
     /* TODO BEGIN 2 */
-    myexit(0, "Delete me first before filling this TODO")
+    uint32_t c;
     /* TODO END 2 */
 };
 
-class ALUInternalTx
+class peInternalTx
 {
 public:
     /* TODO BEGIN 2 */
@@ -92,41 +93,70 @@ public:
     /* TODO END 2 */
 };
 
-// ALUInTx in_tx_ref;
-// ALUOutTx out_tx_ref;
-// ALUInternalTx internal_tx_ref;
+// peInTx in_tx_ref;
+peOutTx out_tx_ref;
+// peInternalTx internal_tx_ref;
 
-class ALUScb
+class peScb
 {
 private:
-    std::deque<ALUInTx *> in_q;
+    std::deque<peInTx *> in_q;
 
 public:
     // Input interface monitor port
-    void writeIn(ALUInTx *tx)
+    void writeIn(peInTx *tx)
     {
         // Push the received transaction item into a queue for later
         in_q.push_back(tx);
     }
 
     // Output interface monitor port
-    void writeOut(ALUOutTx *tx)
+    void writeOut(peOutTx *tx)
     {
         // We should never get any data from the output interface
         // before an input gets driven to the input interface
         if (in_q.empty())
         {
-            std::cout << "Fatal Error in ALUScb: empty ALUInTx queue" << std::endl;
+            std::cout << "Fatal Error in peScb: empty peInTx queue" << std::endl;
             exit(1);
         }
 
         // Grab the transaction item from the front of the input item queue
-        ALUInTx *in;
+        peInTx *in;
         in = in_q.front();
         in_q.pop_front();
 
         /* TODO BEGIN 3 */
-        myexit(0, "Delete me first before filling this TODO")
+        if (in->rst)
+        {
+            out_tx_ref.c = 0;
+            if (!(tx->c == 0))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->rst = 0x%x", in->a, in->b, in->rst);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->c = 0x%x", tx->c);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.c = 0x%x", out_tx_ref.c);
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->c == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+            }
+        }
+        else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->clk, combinational_logic_update))
+        {
+            out_tx_ref.c += (in->a * in->b);
+            if (!(tx->c == out_tx_ref.c))
+            {
+                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->rst = 0x%x", in->a, in->b, in->rst);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->c = 0x%x", tx->c);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.c = 0x%x", out_tx_ref.c);
+                printf("\r\n");
+                fflush(stdout);
+
+                myexit(tx->c == out_tx_ref.c, "TODO 3 Failed: Operation logic result of the Verilog module is incorrect")
+            }
+        }
         /* TODO END 3 */
 
         delete in;
@@ -134,93 +164,102 @@ public:
     }
 };
 
-class ALUInDrv
+class peInDrv
 {
 private:
-    VALU *dut;
+    Vpe *dut;
 
 public:
-    ALUInDrv(VALU *dut)
+    peInDrv(Vpe *dut)
     {
         this->dut = dut;
     }
 
-    void drive(ALUInTx *tx)
+    void drive(peInTx *tx)
     {
         /* TODO BEGIN 4 */
-        myexit(0, "Delete me first before filling this TODO")
         if (tx != NULL)
         {
+            dut->a = tx->a;
+            dut->b = tx->b;
             if (COMBINATIONAL_LOGIC_EVAL_EN)
                 dut->eval(); // combinational update
+            dut->rst = tx->rst;
             delete tx;
         }
         /* TODO END 4 */
-        
+
         dut->clk ^= IS_SEQUENTIAL_LOGIC_UPDATE(combinational_logic_update);
         dut->eval(); // sequential update
     }
 };
 
-class ALUInMon
+class peInMon
 {
 private:
-    VALU *dut;
-    ALUScb *scb;
+    Vpe *dut;
+    peScb *scb;
 
 public:
-    ALUInMon(VALU *dut, ALUScb *scb)
+    peInMon(Vpe *dut, peScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        ALUInTx *tx = new ALUInTx();
+        peInTx *tx = new peInTx();
 
         /* TODO BEGIN 5 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->a = dut->a;
+        tx->b = dut->b;
+        tx->rst = dut->rst;
         /* TODO END 5 */
 
         scb->writeIn(tx);
     }
 };
 
-class ALUOutMon
+class peOutMon
 {
 private:
-    VALU *dut;
-    ALUScb *scb;
+    Vpe *dut;
+    peScb *scb;
 
 public:
-    ALUOutMon(VALU *dut, ALUScb *scb)
+    peOutMon(Vpe *dut, peScb *scb)
     {
         this->dut = dut;
         this->scb = scb;
     }
     void monitor()
     {
-        ALUOutTx *tx = new ALUOutTx();
-        
+        peOutTx *tx = new peOutTx();
+
         /* TODO BEGIN 6 */
-        myexit(0, "Delete me first before filling this TODO")
+        tx->c = dut->c;
         /* TODO END 6 */
 
         scb->writeOut(tx);
     }
 };
 
-ALUInTx *rndAluInTx()
+peInTx *rndAluInTx()
 {
-    ALUInTx *tx = new ALUInTx();
+    peInTx *tx = new peInTx();
     /* TODO BEGIN 7 */
-    uint8_t tx_data_gen_time_increase = IS_COMBINATIONAL_LOGIC_CONDITION_EVAL(combinational_logic_update, !dut->CLK);
+    uint8_t tx_data_gen_time_increase = IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update);
     if (IS_SIM_TIME_IN_RST(sim_time))
-        tx->rst = 0;
-    
-    myexit(0, "Delete me first before filling this TODO")
+        tx->rst = 1;
+
     else if (sim_time >= VERIF_START_TIME)
     {
+        if (tx_data_gen_time_increase)
+        {
+            tx->a = rand();
+            tx->b = rand();
+            tx->rst = 0;
+        }
         tx_data_gen_time += tx_data_gen_time_increase;
         tx_data_gen_time %= MAX_STAGE;
     }
@@ -243,16 +282,15 @@ int main(int argc, char **argv)
     dut->trace(m_trace, 5);
     m_trace->open("waveform.vcd");
 
-    ALUInTx *tx;
+    peInTx *tx;
 
     // Here we create the driver, scoreboard, input and output monitor blocks
-    ALUInDrv *drv = new ALUInDrv(dut);
-    ALUScb *scb = new ALUScb();
-    ALUInMon *inMon = new ALUInMon(dut, scb);
-    ALUOutMon *outMon = new ALUOutMon(dut, scb);
+    peInDrv *drv = new peInDrv(dut);
+    peScb *scb = new peScb();
+    peInMon *inMon = new peInMon(dut, scb);
+    peOutMon *outMon = new peOutMon(dut, scb);
 
     /* TODO BEGIN 8 */
-    myexit(0, "Delete me first before filling this TODO")
     while (sim_time < MAX_SIM_TIME)
     {
 
