@@ -2,11 +2,36 @@
 
 ## Target
 
-- Testbench Procedure based on VCD Waveform Analysis. Pyhon program for Binary Waveform Analysis.
+- [ ] XML-based prompting for all designs.
+- [ ] Analysis Mechanism for Warnings/Errors.
+- ~~Testbench Procedure based on VCD Waveform Analysis. Pyhon program for Binary Waveform Analysis.~~
 
 ## Limit
 
 - Cannot perform VCD Waveform Analysis at glance.
+
+## Further
+
+- tqdm progress bar.
+- Auto ignore `Wno` for `exceptionTitle` if reach limit.
+
+## 3.0.0-new
+
+- Naïve XML Description.
+- Create module with XML-based Description
+- [ ] Warning table
+  - delete "%Error: Exiting due to 1 error(s)"
+  - Exit count for TB check.
+  - Add message to history if all compile success.
+  - fallBack Record
+    - separate graph for syntax compilation and tb simulation.
+    - errorOnlyCompilation is true at first.
+    - No converation history for AIMessage and HumanMessage that reveal success code generation.
+    - Fallback for TB failed
+    - Limit total syntax compilation.
+    - Modify `__next__` operation.
+    - No history on report tracing.
+- Wno for `DECLFILENAME`
 
 ## 3.0.0
 
@@ -61,6 +86,7 @@
 - [ ] Prompt template for if-else statement: [Source](https://tilburg.ai/2024/07/become-a-prompt-engineer-conditional-prompt/)
 - [ ] Enhance template of freestyle prompt of RTLLM.
 - [ ] Prompt Flow for Base Design and final Logic Design.
+- `to_xml(pretty_print=True)`: should use `pretty_print=True`?
 
 ## Notice
 

@@ -1,8 +1,7 @@
-import getpass
 import os, subprocess, re, json, ast
 from typing import Annotated
 
-from typing_extensions import TypedDict, Optional
+from typing_extensions import TypedDict, Optional, Literal
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -23,18 +22,18 @@ from langchain_core.runnables.config import RunnableConfig
 import datetime
 from operator import add
 from dotenv import load_dotenv
-
+from .xmlDescription import Module
 # from pydantic import BaseModel, Field
 
 
 class CodeOutput(TypedDict):
-    """Fixed Verilog Code and any description"""
+    """Fixed/Generated Verilog Code and any description"""
 
-    code: Annotated[str, ..., "The fixed Verilog code"]
+    code: Annotated[str, ..., "The fixed/generated Verilog code"]
     description: Annotated[
         str,
         ...,
-        "Any description. Description for the fixed code, plan to fix the code, ...",
+        "Any description. Description for the fixed/generate code, plan to fix/generate the code, ...",
     ]
 
 
@@ -112,7 +111,19 @@ endmodule
     ]
 )
 
+#
+# reducer
+def limitTrialsReducer(left: dict, right: list[str]):
 
+    for r in right:
+        if r in left:
+            left[r] += 1
+        else:
+            left[r] = 1
+
+    return left
+
+#
 class State(TypedDict):
     # Messages have the type "list". The `add_messages` function
     # in the annotation defines how this state key should be updated
@@ -122,7 +133,17 @@ class State(TypedDict):
     user_input: str
     exception: Optional[dict]
     tb_failed: Optional[dict]
-    latest_code: Optional[str]
+    generated_code: dict
+    lastAllSyntaxCompileStatus: list[dict]
+    lastTBSimulationSuccessStatus: Annotated[list[dict], add]
+    lastSyntaxSimilationSuccessStatus: Annotated[list[dict], add]
+    compileStatusSuccess: Optional[bool]
+    tbStatusSuccess: Optional[bool]
+    tbLimitTrials: Annotated[dict, limitTrialsReducer]
+    tbLimitReach: dict
+    syntaxLimitTrials: Annotated[dict, limitTrialsReducer]
+    syntaxLimitReach: dict
+    errorOnlyCompilation: bool
 
 
 class LLMCodeAgent:
@@ -131,7 +152,8 @@ class LLMCodeAgent:
         modulePath: str,
         llm_model: str = "qwen-2.5-coder-32b",
         workFolderName: str = Template.TEMPORARYLLMWORKFOLDERNAME.value,
-        model_provider: str = "groq",
+        model_provider: Literal['gpt-4o-mini-2024-07-18', "groq"] = "groq",
+        descriptionType: Literal['txt', 'xml'] = 'txt',
         **kwargs,
     ):
 
@@ -173,13 +195,15 @@ class LLMCodeAgent:
 
         graph_builder.add_node("code_generator", self.chatbot_code_generator)
         graph_builder.add_node("code_fixer", self.chatbot_code_fixer)
-        graph_builder.add_node("compile", self.compile)
+        graph_builder.add_node("syntax_compile", self.syntax_compile)
+        graph_builder.add_node("tb_simulation", self.tb_simulation)
 
         graph_builder.add_edge(START, "code_generator")
-        graph_builder.add_edge("code_generator", "compile")
-        # graph_builder.add_edge("compile", "code_fixer")
-        graph_builder.add_edge("code_fixer", "compile")
-        graph_builder.add_conditional_edges("compile", self.route_compile)
+        graph_builder.add_edge("code_generator", "syntax_compile")
+        graph_builder.add_edge("code_fixer", "syntax_compile")
+        graph_builder.add_conditional_edges("syntax_compile", self.syntax_compile_route)
+        graph_builder.add_conditional_edges("tb_simulation", self.tb_simulation_route)
+
         #
         # memory
         memory = MemorySaver()
@@ -207,10 +231,15 @@ class LLMCodeAgent:
         self._verilator_warns = readFileContent("rag/verilator_warns.json")
         self._verilator_warns: dict = ast.literal_eval(self._verilator_warns)
 
+        #
+        #
+        self._descriptionType = descriptionType
+
     @property
     def config(self):
         myconfig: RunnableConfig = {
-            "configurable": {"thread_id": str(self._iteration_time)}
+            "configurable": {"thread_id": str(self._iteration_time), },
+            "recursion_limit": 200
         }
         return myconfig
 
@@ -219,22 +248,9 @@ class LLMCodeAgent:
         if self._workFolderName == Template.TEMPORARYWORKFOLDERNAME.value:
             return True
         return False
-
-    def route_compile(
-        self,
-        state: State,
-    ):
-        print("route_compile state: tb_failed: ", state['tb_failed'], ", exception:", state["exception"])
-        route_compile_yn = (
-            "n" if self.is_verified_flow else input("Route compile (y/n): ")
-        )
-
-        if (not self.no_exception_tb_failed(state=state)) and route_compile_yn == "y":
-            return "code_fixer"
-        return END
-
-    def warning_list(self, log: str, firstOnly=True, errorOnly=True):
-
+    
+    def compilation_status(self, log:str, errorOnly=True):
+        
         warnRegex = "Warning" if not errorOnly else ""
         WarningRegex = re.compile(
             rf"%(?P<exceptionType>{warnRegex}|Error)(?P<lineException>(-(?P<exceptionTitle>[A-Z0-9_]*))?:\s(?P<fileName>\w*\.v):(?P<lineNumber>[0-9]*):(?P<posNumber>[0-9]*))?:\s(?P<exceptionContent>.*)",
@@ -249,13 +265,8 @@ class LLMCodeAgent:
         lineWarningContentRegex = re.compile(
             r"(?P<lineNumber>\d+)\s\|\s(?P<logContent>.+)", re.MULTILINE
         )
-        # print("founds", founds, len(founds), range(len(founds)), not firstOnly)
-        for i in range(len(founds)) if not firstOnly else [0]:
 
-            if len(founds) == 0:
-                founds = [{}]
-                break
-
+        for i in range(len(founds)):
             curSpan = founds[i]["span"][1] + 1
             nextSpan = founds[i + 1]["span"][0] - 1 if i != len(founds) - 1 else -1
 
@@ -277,26 +288,28 @@ class LLMCodeAgent:
                     for line in lineWarningContentRegex.finditer(logContent)
                 ]
             )
+        #
+        firstException = founds[0] if len(founds) else None
+        
+        #
+        # delete "%Error: Exiting due to 1 error(s)"
+        lastExceptionContent:str = founds[-1]["exceptionContent"] if len(founds) else ""
+        if "Exiting due to" in lastExceptionContent:
+            del founds[-1]
 
-        return founds
+        return (firstException, founds)
 
-    def compile(self, state: State):
-        # print("compile", state)
+    def syntax_compile(self, state: State):
+        retState: State = {
+            "exception": None
+        }
+
+        #
         curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
+        codeOutputDict = state["generated_code"]
+        saveFileContent(curCodeFilePath, codeOutputDict["code"])
 
-        # cache current
-        if "conversation" in state and (not self.is_verified_flow):
-            if isinstance(state["conversation"][-1], AIMessage):
-                # if input("Save new code to file? (y/n): ") == 'y':
-                codeOutputDict = ast.literal_eval(state["conversation"][-1].content)
-                saveFileContent(curCodeFilePath, codeOutputDict["code"])
-
-        # current code save
-        self._curLLMCode = readFileContent(curCodeFilePath)
-
-        # currentLLMFile = open(self._moduleWorkPath,'r+')
-
-        result = subprocess.run(
+        compilationCpltProcess = subprocess.run(
             [
                 "make",
                 self._modulePathLint,
@@ -305,91 +318,146 @@ class LLMCodeAgent:
             stdout=subprocess.PIPE,
         )
 
-        resultSTDOUTUTF8 = result.stdout.decode("utf8")
+        resultSTDOUTUTF8 = compilationCpltProcess.stdout.decode("utf8")
 
         #
-        # warning list
-        firstWarning, *_ = self.warning_list(resultSTDOUTUTF8)
+        # compilation status (firstException, success, all)
+        firstException, compileResultAll = self.compilation_status(resultSTDOUTUTF8, state['errorOnlyCompilation'])
+        compileStatusSuccess = compilationCpltProcess.returncode == 0
 
-        additionRetState = {
-            "tb_failed": {} if "tb_failed" not in state else state["tb_failed"]
+        additionRetState : State = {
+            'conversation': [],
+            'exceptionTitleAdditionContent': [],
+            'compileStatusSuccess': compileStatusSuccess,
+            'syntaxLimitTrials': [],
+            'lastAllSyntaxCompileStatus': compileResultAll
+        }
+        
+        #
+        # check syntax limit
+        syntaxLimitKey = f"{firstException["exceptionType"]}-{firstException["exceptionTitle"]}-{firstException["exceptionContent"]}" if firstException != None else None
+        if syntaxLimitKey != None:
+            additionRetState['syntaxLimitTrials'] += [syntaxLimitKey]
+        
+        syntaxLimitTrials = state['syntaxLimitTrials'][syntaxLimitKey] if ((syntaxLimitKey != None) and (syntaxLimitKey in state['syntaxLimitTrials'])) else 0
+        if syntaxLimitTrials >= 5:
+            return {'syntaxLimitReach': firstException}
+
+        totalSyntaxLimitTrials = sum(state['syntaxLimitTrials'].values())
+        if totalSyntaxLimitTrials >= 100:
+            return {'syntaxLimitReach': {'totalSyntaxLimitTrials': totalSyntaxLimitTrials}}
+
+        if firstException != None:
+            if self.is_verified_flow:
+                print("Verified Code Warnings: ", resultSTDOUTUTF8)
+                retState = retState | ({
+                    "exception": firstException,
+                } | additionRetState)
+            else:
+                #
+                if (firstException["exceptionTitle"] not in self._verilator_warns) and (
+                 firstException["exceptionTitle"] != None):
+                    print("firstException", firstException)
+                    if (
+                        input(
+                            f'New addition content for Verilator warning "{firstException['exceptionTitle']}"? (y/n): '
+                        )
+                        == "y"
+                    ):
+                        self._verilator_warns = readFileContent("rag/verilator_warns.json")
+                        self._verilator_warns: dict = ast.literal_eval(
+                            self._verilator_warns
+                        )
+                    
+                if (firstException["exceptionTitle"] in self._verilator_warns) and (
+                    firstException["exceptionTitle"]
+                    not in state["exceptionTitleAdditionContent"]
+                ):
+                    additionRetState[
+                        "conversation"
+                    ] += [HumanMessage(content=f"""Here is description of the "{firstException['exceptionTitle']}":
+{self._verilator_warns[firstException['exceptionTitle']]}""")]
+                    additionRetState["exceptionTitleAdditionContent"] += [
+                    firstException["exceptionTitle"]
+                    ]
+                prompt = ""
+                if firstException["exceptionType"] == "Warning":
+                    prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+Here is the related in-line content with the {exceptionType}:
+{logContent}""".format(
+                    **(firstException)
+                )
+                elif firstException["lineException"] != None:  # error with line number
+                    prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+Here is the related in-line content with the {exceptionType}:
+{logContent}
+""".format(
+                        **(firstException)
+                    )
+                elif firstException["lineException"] == None:
+                    prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+""".format(
+                        **(firstException)
+                    )
+                else:
+                    prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
+Here is the related in-line content with the {exceptionType}:
+{logContent}""".format(
+                    **(firstException)
+                )
+
+                print("compile", firstException)
+                retState |= {
+                    "exception": firstException,
+                    "user_input": prompt,
+                }
+        
+        #
+        # No warning, testbench simulation available
+        if compileStatusSuccess:
+            if len(state['lastTBSimulationSuccessStatus']) == 0:
+                firstException, compileResultAll = self.compilation_status(resultSTDOUTUTF8, False)
+                additionRetState['lastSyntaxSimilationSuccessStatus'] = [{
+                    'exception': firstException,
+                    'generated_code': state['generated_code'],
+                    'lastAllSyntaxCompileStatus': compileResultAll,
+                    'user_input': state['user_input'],
+                }]
+            print("Compile Status Success: ", resultSTDOUTUTF8)
+            
+        return retState | additionRetState
+
+    def syntax_compile_route(self, state: State):
+        print("syntax_compile_route state: ", "exception:", state["exception"])
+        
+        syntaxLimitReach = state['syntaxLimitReach'] if 'syntaxLimitReach' in state else None
+        tbLimitReach = state['tbLimitReach'] if 'tbLimitReach' in state else None
+
+        if syntaxLimitReach == None and tbLimitReach == None:
+            syntax_route_compile_yn = (
+                "n" if self.is_verified_flow else input("Syntax Route compile (y/n): ")
+            )
+
+            if (state['compileStatusSuccess']) and syntax_route_compile_yn == "y":
+                return "tb_simulation"
+            elif (not state['compileStatusSuccess']) and syntax_route_compile_yn == "y":
+                return 'code_fixer'
+        return END
+
+    def tb_simulation(self, state: State):
+        print("Compile Status Success, check testbench")
+
+        retState: State = {
+
         }
 
-        if self.is_verified_flow and len(firstWarning.keys()):
-            print("Verified Code Warnings: ", resultSTDOUTUTF8)
-            return {
-                "exception": firstWarning,
-                "latest_code": self._curLLMCode,
-            } | additionRetState
-        elif len(firstWarning.keys()):
-            #
-            additionContent = {"exceptionTitleAdditionContent": ""}
-            # ask for addition of the warning and update warning description
-            if (firstWarning["exceptionTitle"] not in self._verilator_warns) and (
-                firstWarning["exceptionTitle"] != "None" or firstWarning["exceptionTitle"] != None
-            ):
-                print("firstWarning", firstWarning)
-                if (
-                    input(
-                        f'New addition content for Verilator warning "{firstWarning['exceptionTitle']}"? (y/n): '
-                    )
-                    == "y"
-                ):
-                    self._verilator_warns = readFileContent("rag/verilator_warns.json")
-                    self._verilator_warns: dict = ast.literal_eval(
-                        self._verilator_warns
-                    )
-
-            if (firstWarning["exceptionTitle"] in self._verilator_warns) and (
-                firstWarning["exceptionTitle"]
-                not in state["exceptionTitleAdditionContent"]
-            ):
-                additionContent[
-                    "exceptionTitleAdditionContent"
-                ] = f"""Here is description of the "{firstWarning['exceptionTitle']}":
-{self._verilator_warns[firstWarning['exceptionTitle']]}"""
-                additionRetState["exceptionTitleAdditionContent"] = [
-                    firstWarning["exceptionTitle"]
-                ]
-
-            prompt = ""
-            if firstWarning["exceptionType"] == "Warning":
-                prompt = """The Verilator compiler raises a {exceptionType}, called {exceptionTitle}, for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-Here is the related in-line content with the {exceptionType}:
-{logContent}
-{exceptionTitleAdditionContent}
-    """.format(
-                    **(firstWarning | additionContent)
-                )
-            elif firstWarning["lineException"] != None:  # error with line number
-                prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-Here is the related in-line content with the {exceptionType}:
-{logContent}
-{exceptionTitleAdditionContent}
-    """.format(
-                    **(firstWarning | additionContent)
-                )
-            elif firstWarning["lineException"] == None:
-                prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-""".format(
-                    **(firstWarning)
-                )
-            else:
-                prompt = """The Verilator compiler raises a {exceptionType} for the below module. The content of the {exceptionType} is \"{exceptionContent}\".
-Here is the related in-line content with the {exceptionType}:
-
-{logContent}
-""".format(
-                    **(firstWarning)
-                )
-
-            print("compile", firstWarning)
-            return {
-                "exception": firstWarning,
-                "user_input": prompt,
-                "latest_code": self._curLLMCode,
-            } | additionRetState
-        print("compile: NO EXCEPTION NOW!", resultSTDOUTUTF8)
+        additionRetState : State = {
+            "tb_failed": {} if "tb_failed" not in state else state["tb_failed"],
+            'conversation': [],
+            'exceptionTitleAdditionContent': [],
+            'tbStatusSuccess': False,
+            'tbLimitTrials': [],
+        }
 
         #
         # tb check
@@ -397,7 +465,7 @@ Here is the related in-line content with the {exceptionType}:
             interrupt("TB Syntax is incorrect!")
 
         # testbench
-        result = subprocess.run(
+        tbCpltProcess = subprocess.run(
             [
                 "make",
                 self._modulePathDockerRun,
@@ -406,9 +474,27 @@ Here is the related in-line content with the {exceptionType}:
             stdout=subprocess.PIPE,
         )
 
-        resultSTDOUTUTF8 = result.stdout.decode("utf8")
+        resultSTDOUTUTF8 = tbCpltProcess.stdout.decode("utf8")
+        tbStatusSuccess = tbCpltProcess.returncode == 0
+        additionRetState['tbStatusSuccess'] = tbStatusSuccess
+
         tb_failed = self.testbench_failed(resultSTDOUTUTF8)
+
+        #
+        # check tb limit
+        tbLimitKey = f"{tb_failed["todoNum"]}-{tb_failed["failureContent"]}" if (("todoNum" in tb_failed) and ("failureContent" in tb_failed)) else None
+        if tbLimitKey != None:
+            additionRetState['tbLimitTrials'] += [tbLimitKey]
+        
+        tbLimitTrials = state['tbLimitTrials'][tbLimitKey] if ((tbLimitKey != None) and (tbLimitKey in state['tbLimitTrials'])) else 0
+        if tbLimitTrials >= 5:
+            return {'tbLimitReach': tb_failed}
+
+        additionRetState |= {
+                "tb_failed": tb_failed,
+        }
         print("tb_failed", tb_failed)
+
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
 The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}"
@@ -417,37 +503,81 @@ The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
 The trace values of the expected outputs must be: {refOutputTrace}
 """.format(
-                **tb_failed
-            )
-
-            tb_failed_len = (
-                len(state["tb_failed"].keys()) if "tb_failed" in state else 0
-            )
-            # memory for the tb code
-            if ("tb_failed" not in state) or (tb_failed_len == 0):
+            **tb_failed
+        )
+            if "tb_failed" not in state['exceptionTitleAdditionContent']:
                 tb_codeFilePath = getTemplateFilenamePath(
                     self._moduleWorkPath, "cpp", "tb"
                 )
                 tb_code = readFileContent(tb_codeFilePath)
-                prompt = (
-                    prompt
-                    + """
-Here are the content of the testbench code:
-{tb_code}
-""".format(
+                additionRetState[
+                    "conversation"
+                ] += [HumanMessage(content="""
+Here are the content of the testbench code of the Verilog module:
+{tb_code}""".format(
                         tb_code=tb_code
                     )
-                )
+                )]
+                additionRetState["exceptionTitleAdditionContent"] += [
+                    "tb_failed"
+                ]
 
-            return {
-                "exception": None,
-                "tb_failed": tb_failed,
+            additionRetState |= {
                 "user_input": prompt,
-                "latest_code": self._curLLMCode,
             }
+        elif tbStatusSuccess:
+            print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
+            additionRetState |= {
+                # TODO
+                'tb_failed': None,
+                'lastTBSimulationSuccessStatus': [{
+                    'exception': state['exception'],
+                    'generated_code': state['generated_code'],
+                    'lastAllSyntaxCompileStatus': state['lastAllSyntaxCompileStatus'],
+                    'user_input': state['user_input'],
+                }]
+            }
+            if state['errorOnlyCompilation']:
+                errorOnlyCompilationDisable = {
+                    'errorOnlyCompilation' : False
+                }
+                additionRetState |= errorOnlyCompilationDisable
+                new_syntax_compile_status : State = self.syntax_compile(state=(state | errorOnlyCompilationDisable))
+                additionRetState |= new_syntax_compile_status
+                additionRetState |= {
+                # TODO
+                'tb_failed': None,
+                'lastTBSimulationSuccessStatus': [{
+                    'exception': new_syntax_compile_status['exception'],
+                    'generated_code': state['generated_code'],
+                    'lastAllSyntaxCompileStatus': new_syntax_compile_status['lastAllSyntaxCompileStatus'],
+                    'user_input': state['user_input'],
+                }]
+            }
+        elif tbStatusSuccess == False and state['errorOnlyCompilation'] == False:
+            additionRetState |= state['lastTBSimulationSuccessStatus'][-1]
+            input("Fallback to lastTBSimulationSuccessStatus. (enter any key)")
+        else:
+            print("TB Simulation raised unknown error!")
+            interrupt("TB Simulation raised unknown error!")
+        
+        return retState | additionRetState
 
-        print("compile: NO EXCEPTION AND TESTBENCH NOW!", resultSTDOUTUTF8)
-        return {"exception": None, "tb_failed": None, "latest_code": self._curLLMCode}
+    def tb_simulation_route(self, state: State):
+        print("tb_simulation_route state: tb_failed: ", state['tb_failed'])
+
+        tbLimitReach = state['tbLimitReach'] if 'tbLimitReach' in state else None
+        syntaxLimitReach = state['syntaxLimitReach'] if 'syntaxLimitReach' in state else None
+        if tbLimitReach == None and syntaxLimitReach == None:
+            tb_route_compile_yn = (
+                "n" if self.is_verified_flow else input("TB Route compile (y/n): ")
+            )
+
+            if ((not state['tbStatusSuccess']) or (state['exception'] != None)) and tb_route_compile_yn == "y":
+                #
+                # TODO: enhancement fallback decision.
+                return "code_fixer"
+        return END
 
     def testbench_failed(self, log: str):
 
@@ -466,9 +596,9 @@ Here are the content of the testbench code:
             ioTraceMatches = [
                 ioTraceMatch.groupdict() for ioTraceMatch in ioTraceRegex.finditer(log)
             ]
-            inputTraceContent = ioTraceMatches[0]["traceContent"]
-            outputTraceContent = ioTraceMatches[1]["traceContent"]
-            refOutputTraceContent = ioTraceMatches[2]["traceContent"]
+            inputTraceContent = ioTraceMatches[0]["traceContent"] if len(ioTraceMatches) > 0 else None
+            outputTraceContent = ioTraceMatches[1]["traceContent"] if len(ioTraceMatches) > 1 else None
+            refOutputTraceContent = ioTraceMatches[2]["traceContent"] if len(ioTraceMatches) > 2 else None
             failureContentRegex = re.compile(
                 r"Assertion\s`.*\"TODO\s[0-9]*\sFailed:\s(?P<failureContent>.*)"
             )
@@ -490,13 +620,7 @@ Here are the content of the testbench code:
 
     def no_exception_tb_failed(self, state: State):
 
-        exception = state["exception"] if "exception" in state else None
-        tb_failed = state["tb_failed"] if "tb_failed" in state else None
-
-        if exception != None or tb_failed != None:
-            return False
-
-        return True
+        return state['compileStatusSuccess'] and state['tbStatusSuccess'] and (state['exception'] == None)
 
     def chatbot_code_fixer(self, state: State):
 
@@ -511,12 +635,15 @@ Here are the content of the testbench code:
             else self.code_correcter_chain
         )
         # print("chatbot", state)
+        generatedModuleMess = [HumanMessage(content=f"""Here is the provided module code:
+{state['generated_code']}
+""")]
         for i in range(5):
             try:
                 invokeResult = chain.invoke(
                     {
                         "user_input": state["user_input"],
-                        "conversation": state["conversation"],
+                        "conversation": state["conversation"] + generatedModuleMess,
                     }
                 )
                 break
@@ -527,11 +654,17 @@ Here are the content of the testbench code:
         if invokeResult["code"][-1] != "\n":
             invokeResult["code"] += "\n"
 
+        conver_human_mess = HumanMessage(content=state["user_input"])
+        # conver_ai_mess = AIMessage(content=json.dumps(invokeResult))
+        conver_human_mess.pretty_print()
+        # conver_ai_mess.pretty_print()
+        AIMessage(content=invokeResult['code']).pretty_print()
         return {
-            "conversation": [
-                HumanMessage(content=state["user_input"]),
-                AIMessage(content=json.dumps(invokeResult)),
-            ]
+            # "conversation": [
+            #     conver_human_mess,
+            #     conver_ai_mess
+            # ]
+            "generated_code": invokeResult
         }
 
     @property
@@ -566,20 +699,26 @@ Here are the content of the testbench code:
             curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
             code = readFileContent(curCodeFilePath)
             content = {"code": code}
+            conver_human_mess = HumanMessage(content=state["user_input"])
+            # conver_ai_mess = AIMessage(content=json.dumps(content))
+            
+            conver_human_mess.pretty_print()
+            # conver_ai_mess.pretty_print()
+            AIMessage(content=content['code']).pretty_print()
             return {
-                "conversation": [
-                    HumanMessage(content=state["user_input"]),
-                    AIMessage(content=json.dumps(content)),
-                ]
+                # "conversation": [
+                #     conver_human_mess,
+                #     conver_ai_mess,
+                # ],
+                "generated_code": content,
+                # 'queriedCode': content
             }
 
-        # print("chatbot", state)
         for i in range(5):
             try:
                 invokeResult = self.code_generator_chain.invoke(
                     {
                         "user_input": state["user_input"],
-                        # "conversation": state["conversation"],
                     }
                 )
                 break
@@ -590,39 +729,33 @@ Here are the content of the testbench code:
         if invokeResult["code"][-1] != "\n":
             invokeResult["code"] += "\n"
 
-        # print("chatbot_code_generator", invokeResult)
+        conver_human_mess = HumanMessage(content=state["user_input"])
+        # conver_ai_mess = AIMessage(content=json.dumps(invokeResult))
 
+        conver_human_mess.pretty_print()
+        # conver_ai_mess.pretty_print()
+        AIMessage(content=invokeResult['code']).pretty_print()
         return {
-            "conversation": [
-                HumanMessage(content=state["user_input"]),
-                AIMessage(content=json.dumps(invokeResult)),
-            ]
+            # "conversation": [
+            #     conver_human_mess,
+            #     conver_ai_mess
+            # ],
+            "generated_code": invokeResult,
         }
-
-    def stream_graph_updates(self, user_input: State):
-        events = self._graph.stream(
-            user_input,
-            self.config,
-            stream_mode="values",
-        )
+    def checkXMLDescription(self, description:str):
         try:
-            for event in events:
-                if (
-                    "conversation" in event
-                    and len(event["conversation"])
-                    and self._last_print_type == type(HumanMessage)
-                ):
-                    messagetype = type(event["conversation"][-1])
-                    contentDict = ast.literal_eval(event["conversation"][-1].content)
-                    code = contentDict["code"]
-                    newMessage = messagetype(content=code)
-                    newMessage.pretty_print()
-                    self._last_print_type = messagetype
-                else:
-                    HumanMessage(content=event["user_input"]).pretty_print()
-                    self._last_print_type = type(HumanMessage)
+            self._xmlmodule = Module.from_xml(description)
+            valid = True
+            formattedXMLDoc:str = self._xmlmodule.to_xml(pretty_print=True).decode('utf-8')
         except:
-            pass
+            valid = False
+            formattedXMLDoc = None
+
+        return (valid, formattedXMLDoc)
+    def stream_graph_updates(self, user_input: State):
+        return self._graph.invoke(user_input,
+            self.config,
+        )
 
     def __next__(self):
         confirm = input("##### Trial: " + str(self._iteration_time) + ". Next? (y/n) ")
@@ -634,27 +767,46 @@ Here are the content of the testbench code:
 
         # description
         description = readFileContent(
-            os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value)
+            os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value if self._descriptionType == 'txt' else Template.DESCRIPTIONXMLFILENAME.value)
         )
 
-        self.stream_graph_updates({"user_input": description})
+        if self._descriptionType == 'xml':
+            xmlDescriptionIsValid, formattedXMLDescription = self.checkXMLDescription(description)
+            if xmlDescriptionIsValid:
+                description = formattedXMLDescription
+            else:
+                print("End Agent with Iteration trial: ", self._iteration_time, " . Because XML check failed!")
+                raise StopIteration
+        
+        cur_graph_state: State = self.stream_graph_updates({"user_input": description, 'errorOnlyCompilation': True})
 
-        cur_graph_state: State = self._graph.get_state(self.config).values
+        # cur_graph_state: State = self._graph.get_state(self.config).values
 
-        exception = (
-            cur_graph_state["exception"] if "exception" in cur_graph_state else None
-        )
-        tb_failed = (
-            cur_graph_state["tb_failed"] if "tb_failed" in cur_graph_state else None
-        )
+        # exception = (
+        #     cur_graph_state["exception"] if "exception" in cur_graph_state else None
+        # )
+        # tb_failed = (
+        #     cur_graph_state["tb_failed"] if "tb_failed" in cur_graph_state else None
+        # )
+        exception = False
+        tb_failed = False
+
+        if len(cur_graph_state['lastTBSimulationSuccessStatus']):
+            exception = tb_failed = True
+        elif len(cur_graph_state['lastSyntaxSimilationSuccessStatus']):
+            exception = True
+
         print("### Trial ", self._iteration_time, " results:")
         print(
-            "\t\t- Trial ", self._iteration_time, " exception pass: ", exception == None
+            "\t\t- Trial ", self._iteration_time, " exception pass: ", exception
         )
-        print("\t\t- Trial ", self._iteration_time, " tb pass: ", tb_failed == None)
+        print("\t\t- Trial ", self._iteration_time, " tb pass: ", tb_failed)
 
         self._iteration_time += 1
-        return cur_graph_state
+
+        cur_graph_state = cur_graph_state.copy()
+        del cur_graph_state['conversation']
+        return cur_graph_state, exception, tb_failed
 
     def pnggraph(self):
         try:
@@ -680,27 +832,15 @@ Here are the content of the testbench code:
         # generate first shoot
         json_dumps_report = {
             "llm_model": self._llm_model,
-            "history_trial": [],
             "exception_trial": [],
             "tb_failed_trial": [],
-            "code_trial": [],
+            "state_trial": [],
         }
 
-        for iter_report in myiter:
-            exception = iter_report["exception"] if "exception" in iter_report else None
-            tb_failed = iter_report["tb_failed"] if "tb_failed" in iter_report else None
-            latest_code = (
-                iter_report["latest_code"] if "latest_code" in iter_report else None
-            )
-            json_dumps_report["history_trial"].append(
-                [
-                    {"role": message.type, "content": message.content}
-                    for message in iter_report["conversation"]
-                ]
-            )
+        for iter_report, exception, tb_failed in myiter:
             json_dumps_report["exception_trial"].append(exception)
             json_dumps_report["tb_failed_trial"].append(tb_failed)
-            json_dumps_report["code_trial"].append(latest_code)
+            json_dumps_report["state_trial"].append(iter_report)
 
         if not self.is_verified_flow:
             #
@@ -730,13 +870,13 @@ Here are the content of the testbench code:
         # count passes
         count_excep_pass = sum(
             [
-                1 if excep_pass == None else 0
+                1 if excep_pass == True else 0
                 for excep_pass in json_dumps_report["exception_trial"]
             ]
         )
         count_tb_pass = sum(
             [
-                1 if tb_pass == None else 0
+                1 if tb_pass == True else 0
                 for tb_pass in json_dumps_report["tb_failed_trial"]
             ]
         )

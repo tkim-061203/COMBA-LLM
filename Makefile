@@ -3,7 +3,7 @@ WORKDIR?=.work
 DESIGNS=$(patsubst ./${WORKDIR}/%, %, $(shell find ./${WORKDIR} -maxdepth 1 -mindepth 1 -type d))
 # VERILATOR_WNO=ENUMVALUE DECLFILENAME GENUNNAMED PINCONNECTEMPTY UNOPTFLAT
 # VERILATOR_WNO=WIDTHEXPAND UNUSEDSIGNAL
-VERILATOR_WNO=
+VERILATOR_WNO=DECLFILENAME
 # $(patsubst %, -Wno-%, $(VERILATOR_WNO))
 define verilating_template
 ./${WORKDIR}/$(1)/obj_dir/V$(1).h: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
@@ -37,14 +37,6 @@ define docker_run_template
 ./${WORKDIR}/$(1)/docker_run:
 	@ bash -c "verilator_yosys.sh bash $$$$PWD -c \"./${WORKDIR}/$(1)/obj_dir/V$(1)\""
 endef
-
-# all:
-# 	@echo ${DESIGNS}
-# 	# @echo $(foreach design, $(DESIGNS), $(call verilating_template,$(design)))
-# 	@exit 1;
-
-# all:
-# 	echo $(patsubst %, -Wno-%, $(VERILATOR_WNO))
 
 $(foreach design, $(DESIGNS), $(eval $(call verilating_template,$(design))))
 $(foreach design, $(DESIGNS), $(eval $(call binmake_template,$(design))))

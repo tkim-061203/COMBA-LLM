@@ -6,6 +6,7 @@ class Template(Enum):
     MODULEFOLDER = "modules"
     TEMPLATEFOLDER = "template"
     DESCRIPTIONFILENAME = "design_description.txt"
+    DESCRIPTIONXMLFILENAME = "design_description.xml"
     TBFILENAME = "tb.txt"
     MODULEFILENAME = "module.txt"
     TEMPORARYWORKFOLDERNAME = ".work"
