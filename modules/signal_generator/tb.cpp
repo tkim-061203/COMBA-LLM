@@ -15,9 +15,9 @@ Vsignal_generator *dut = new Vsignal_generator;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -127,6 +127,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->wave = 0x%x", tx->wave);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: wave = 0x%x", 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -141,7 +143,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->wave = 0x%x", tx->wave);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: tx->wave = 0x%lx, %d", LATCH_MANAGEMENT_SELECTOR_VAL(latch_management_wave), LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(latch_management_wave));
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: wave = 0x%lx, %d", LATCH_MANAGEMENT_SELECTOR_VAL(latch_management_wave), LATCH_MANAGEMENT_IS_SELECTOR_AFTER_LATCH(latch_management_wave));
                 printf("\r\n");
                 fflush(stdout);
 

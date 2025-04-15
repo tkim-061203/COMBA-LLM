@@ -1,4 +1,4 @@
-import os, subprocess, re, json, ast
+import os, subprocess, re, json, ast, glob
 from typing import Annotated
 
 from typing_extensions import TypedDict, Optional, Literal
@@ -478,6 +478,17 @@ Here is the related in-line content with the {exceptionType}:
         tbStatusSuccess = tbCpltProcess.returncode == 0
         additionRetState['tbStatusSuccess'] = tbStatusSuccess
 
+        #
+        # core.number file
+        if not tbStatusSuccess:
+            core_number_files = glob.glob('core.[0-9]*')
+            # Remove all files one by one
+            for file in core_number_files:
+                try:
+                    os.remove(file)
+                except OSError:
+                    print("Error while deleting file")
+
         tb_failed = self.testbench_failed(resultSTDOUTUTF8)
 
         #
@@ -497,13 +508,15 @@ Here is the related in-line content with the {exceptionType}:
 
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
-The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}"
+The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}".
 
 The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
 The trace values of the expected outputs must be: {refOutputTrace}
+
+Find out related signals mismatchs with the expected outputs. If mismatched and related signals is described in the description <module refid="{moduleName}"/>, fix the mismatchs based on the description <module refid="{moduleName}"/>.
 """.format(
-            **tb_failed
+            **(tb_failed | {"moduleName": self._moduleName})
         )
             if "tb_failed" not in state['exceptionTitleAdditionContent']:
                 tb_codeFilePath = getTemplateFilenamePath(
@@ -560,7 +573,7 @@ Here are the content of the testbench code of the Verilog module:
         else:
             print("TB Simulation raised unknown error!")
             interrupt("TB Simulation raised unknown error!")
-        
+
         return retState | additionRetState
 
     def tb_simulation_route(self, state: State):
@@ -700,16 +713,16 @@ Here are the content of the testbench code of the Verilog module:
             code = readFileContent(curCodeFilePath)
             content = {"code": code}
             conver_human_mess = HumanMessage(content=state["user_input"])
-            # conver_ai_mess = AIMessage(content=json.dumps(content))
+            conver_ai_mess = AIMessage(content=json.dumps(content))
             
             conver_human_mess.pretty_print()
             # conver_ai_mess.pretty_print()
             AIMessage(content=content['code']).pretty_print()
             return {
-                # "conversation": [
-                #     conver_human_mess,
-                #     conver_ai_mess,
-                # ],
+                "conversation": [
+                    conver_human_mess,
+                    conver_ai_mess,
+                ],
                 "generated_code": content,
                 # 'queriedCode': content
             }
@@ -730,16 +743,16 @@ Here are the content of the testbench code of the Verilog module:
             invokeResult["code"] += "\n"
 
         conver_human_mess = HumanMessage(content=state["user_input"])
-        # conver_ai_mess = AIMessage(content=json.dumps(invokeResult))
+        conver_ai_mess = AIMessage(content=json.dumps(invokeResult))
 
         conver_human_mess.pretty_print()
         # conver_ai_mess.pretty_print()
         AIMessage(content=invokeResult['code']).pretty_print()
         return {
-            # "conversation": [
-            #     conver_human_mess,
-            #     conver_ai_mess
-            # ],
+            "conversation": [
+                conver_human_mess,
+                conver_ai_mess
+            ],
             "generated_code": invokeResult,
         }
     def checkXMLDescription(self, description:str):

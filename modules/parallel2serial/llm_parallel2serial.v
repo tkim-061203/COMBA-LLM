@@ -3,13 +3,11 @@ module parallel2serial(
     input rst_n,
     input [3:0] d,
     output reg valid_out,
-    output dout
+    output reg dout
 );
 
     reg [3:0] data;
     reg [1:0] cnt;
-
-    assign dout = data[3]; // dout is the MSB of data
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -18,14 +16,17 @@ module parallel2serial(
             data <= 4'b0000;
         end else begin
             if (cnt == 2'b11) begin
-                data <= d; // Load new data
-                cnt <= 2'b00; // Reset counter
-                valid_out <= 1; // Set valid output
+                data <= d;
+                cnt <= 2'b00;
+                valid_out <= 1;
             end else begin
-                cnt <= cnt + 1; // Increment counter
-                valid_out <= 0; // Clear valid output
-                data <= {data[2:0], data[3]}; // Shift data left
+                cnt <= cnt + 1;
+                valid_out <= 0;
+                data <= {data[2:0], data[3]}; // Shift left
             end
         end
     end
+
+    assign dout = data[3]; // MSB of data
+
 endmodule

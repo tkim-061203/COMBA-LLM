@@ -8,13 +8,13 @@ VERILATOR_WNO=DECLFILENAME
 define verilating_template
 ./${WORKDIR}/$(1)/obj_dir/V$(1).h: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
 	@ echo "###Verilating for $(1)###"
-	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
+	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --trace --x-assign 0 --x-initial 0 -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
 endef
 
 define lintonly_verilating_template
 ./${WORKDIR}/$(1)/lint: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
 	@ echo "###Verilating for $(1)###"
-	cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --lint-only --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
+	cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --lint-only --trace --x-assign 0 --x-initial 0 -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
 endef
 
 define binmake_template

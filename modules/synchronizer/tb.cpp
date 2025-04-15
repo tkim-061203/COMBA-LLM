@@ -16,9 +16,9 @@ Vsynchronizer *dut = new Vsynchronizer;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -85,6 +85,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->arstn = 0x%x, in->brstn = 0x%x, in->data_en = 0x%x, in->data_in = 0x%x", in->arstn, in->brstn, in->data_en, in->data_in);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->dataout = 0x%x", tx->dataout);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dataout = 0x%x", 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -98,10 +100,12 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->arstn = 0x%x, in->brstn = 0x%x, in->data_en = 0x%x, in->data_in = 0x%x", in->arstn, in->brstn, in->data_en, in->data_in);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->dataout = 0x%x", tx->dataout);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dataout = 0x%x", in_tx_ref.data_in);
+
                 printf("\r\n");
                 fflush(stdout);
 
-                // myexit(tx->dataout == in_tx_ref.data_in, "TODO 3 Failed: Synchronization logic result of the Verilog module is incorrect")
+                myexit(tx->dataout == in_tx_ref.data_in, "TODO 3 Failed: Synchronization logic result of the Verilog module is incorrect")
             }
         }
         /* TODO END 3 */

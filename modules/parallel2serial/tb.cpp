@@ -16,9 +16,9 @@ Vparallel2serial *dut = new Vparallel2serial;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -117,6 +117,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dout = 0x%x, valid_out = 0x%x", 0, 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -139,6 +141,8 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: valid_out = 0x%x", 1);
+
                     printf("\r\n");
                     fflush(stdout);
 
@@ -149,6 +153,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.dout = 0x%x, tx->valid_out = 0x%x", out_tx_ref.dout, tx->valid_out);
+
                 printf("\r\n");
                 fflush(stdout);
 

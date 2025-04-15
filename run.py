@@ -163,11 +163,12 @@ def makeWorkingFolder(
 
         moduleNameWorkPath = os.path.join(workFolderName, moduleName)
 
-        if not os.path.isdir(moduleNameWorkPath):
-            os.mkdir(moduleNameWorkPath)
-        elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
+        # if not os.path.isdir(moduleNameWorkPath):
+        #     os.mkdir(moduleNameWorkPath)
+        # elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
+        if os.path.isdir(moduleNameWorkPath):
             shutil.rmtree(moduleNameWorkPath)
-            os.mkdir(moduleNameWorkPath)
+        os.mkdir(moduleNameWorkPath)
 
         tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
         tbModulePath = os.path.join(modulePath, tbModuleFileName)
@@ -225,9 +226,9 @@ def runFlow(
 
     for moduleNormPath in moduleNormPaths:
         moduleName = os.path.basename(moduleNormPath)
-        moduleNameWorkPath = os.path.join(workFolderName, moduleName)
-        if not os.path.isdir(moduleNameWorkPath):
-            makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
+        # moduleNameWorkPath = os.path.join(workFolderName, moduleName)
+        # if not os.path.isdir(moduleNameWorkPath):
+        makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
 
         #
         print("flow here", moduleNormPath, moduleName)

@@ -14,6 +14,8 @@
 
 - tqdm progress bar.
 - Auto ignore `Wno` for `exceptionTitle` if reach limit.
+- Research of partial feedback such as Verilog Code - Compiler.
+  - [ ] Framework for auto feedback generator?
 
 ## 3.0.0-new
 
@@ -32,6 +34,8 @@
     - Modify `__next__` operation.
     - No history on report tracing.
 - Wno for `DECLFILENAME`
+- `--x-assign 0 --x-initial 0` for Xs states.
+- Auto delete `core.numbers` files.
 
 ## 3.0.0
 

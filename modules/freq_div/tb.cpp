@@ -15,9 +15,9 @@ Vfreq_div *dut = new Vfreq_div;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 0 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 uint8_t tb_counters[2];
@@ -81,6 +81,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->RST = 0x%x", in->RST);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->CLK_10 = 0x%x, tx->CLK_1 = 0x%x, tx->CLK_50 = 0x%x", tx->CLK_10, tx->CLK_1, tx->CLK_50);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: CLK_10 = 0x%x, CLK_1 = 0x%x, CLK_50 = 0x%x", 0, 0, 0);
                 printf("\r\n");
                 fflush(stdout);
 

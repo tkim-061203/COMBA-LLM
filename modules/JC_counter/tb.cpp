@@ -13,9 +13,9 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -76,6 +76,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->Q = 0x%lx", tx->Q);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: Q = 0x%x", 0);
                 printf("\r\n");
                 fflush(stdout);
 
@@ -95,7 +96,8 @@ public:
             {
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->Q = 0x%lx, out_tx_ref.Q = 0x%lx", tx->Q, out_tx_ref.Q);
+                printf("\r\n# TODO 3 OUTPUT TRACE: tx->Q = 0x%lx", tx->Q);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.Q = 0x%lx", out_tx_ref.Q);
                 printf("\r\n");
                 fflush(stdout);
 

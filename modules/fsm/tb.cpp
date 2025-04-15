@@ -16,9 +16,9 @@ Vfsm *dut = new Vfsm;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 8
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -133,6 +133,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->IN = 0x%x, in->RST = 0x%x", in->IN, in->RST);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->MATCH = 0x%x", tx->MATCH);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: MATCH = 0x%x", 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -154,6 +156,8 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->IN = 0x%x, in->RST = 0x%x", in->IN, in->RST);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->MATCH = 0x%x", tx->MATCH);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: MATCH = 0x%x", 1);
+
                     printf("\r\n");
                     fflush(stdout);
 
@@ -167,6 +171,8 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->IN = 0x%x, in->RST = 0x%x", in->IN, in->RST);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->MATCH = 0x%x", tx->MATCH);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.MATCH = 0x%x", out_tx_ref.MATCH);
+
                     printf("\r\n");
                     fflush(stdout);
 

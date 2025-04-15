@@ -16,9 +16,9 @@ Vwidth_8to16 *dut = new Vwidth_8to16;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 8
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -138,6 +138,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->data_in = 0x%x, in->rst_n = 0x%x, in->valid_in = 0x%x", in->data_in, in->rst_n, in->valid_in);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: data_out = 0x%x, valid_out = 0x%x", 0, 0);
                 printf("\r\n");
                 fflush(stdout);
 
@@ -157,7 +158,7 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->data_in = 0x%x, in->rst_n = 0x%x, in->valid_in = 0x%x", in->data_in, in->rst_n, in->valid_in);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->data_out = 0x%x, tx->valid_out = 0x%x", tx->data_out, tx->valid_out);
-                    printf("\r\n# TODO 3 REF OUTPUT TRACE: out_tx_ref.data_out = 0x%x, out_tx_ref.valid_out = 0x%x", out_tx_ref.data_out, out_tx_ref.valid_out);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.data_out = 0x%x, out_tx_ref.valid_out = 0x%x", out_tx_ref.data_out, out_tx_ref.valid_out);
                     printf("\r\n");
                     fflush(stdout);
 

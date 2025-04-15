@@ -1,11 +1,10 @@
 module edge_detect(
-    input wire clk,
-    input wire rst_n,
-    input wire a,
+    input clk,
+    input rst_n,
+    input a,
     output reg rise,
     output reg down
 );
-
     reg a_prev;
 
     always @(posedge clk or negedge rst_n) begin
@@ -25,5 +24,4 @@ module edge_detect(
             a_prev <= a; // Update previous state
         end
     end
-
 endmodule
