@@ -16,9 +16,9 @@ Vedge_detect *dut = new Vedge_detect;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -133,6 +133,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->a = 0x%x", in->rst_n, in->a);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->down = 0x%x, tx->rise = 0x%x", tx->down, tx->rise);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: down = 0x%x, rise = 0x%x", 0, 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -153,6 +155,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x, in->a = 0x%x", in->rst_n, in->a);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->down = 0x%x, tx->rise = 0x%x", tx->down, tx->rise);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.down = 0x%x, out_tx_ref.rise = 0x%x", out_tx_ref.down, out_tx_ref.rise);
+
                 printf("\r\n");
                 fflush(stdout);
 

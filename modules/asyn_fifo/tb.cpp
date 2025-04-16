@@ -142,6 +142,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: rempty = 0x%x, wfull = 0x%x", 1, 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -157,7 +159,7 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
-                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
                     printf("\r\n");
                     fflush(stdout);
 
@@ -171,7 +173,7 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
-                    printf("\r\n# TODO 3 REF OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
                     printf("\r\n");
                     fflush(stdout);
 

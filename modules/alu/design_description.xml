@@ -1,0 +1,73 @@
+<module id="alu">
+    <description>Implement an ALU for a 32-bit MIPS-ISA CPU. The “a” and “b” are the two operands of the ALU, the “aluc” is the opcode, and the “r” gives out the result. “zero” means if the result is zero, “carry” means if there is a carry bit, “negative” means if the result is negative, “overflow” means if the computation is overflow, the “flag” is the result of “slt” and “sltu” instructions. The supported operations and corresponding opcode are shown below:
+    parameter ADD = 6'b100000;
+    parameter ADDU = 6'b100001;
+    parameter SUB = 6'b100010;
+    parameter SUBU = 6'b100011;
+    parameter AND = 6'b100100;
+    parameter OR = 6'b100101;
+    parameter XOR = 6'b100110;
+    parameter NOR = 6'b100111;
+    parameter SLT = 6'b101010;
+    parameter SLTU = 6'b101011;
+    parameter SLL = 6'b000000;
+    parameter SRL = 6'b000010;
+    parameter SRA = 6'b000011;
+    parameter SLLV = 6'b000100;
+    parameter SRLV = 6'b000110;
+    parameter SRAV = 6'b000111;
+    parameter LUI = 6'b001111;
+</description>
+    <ports>
+        <input id="a">a 32-bit input operand.</input>
+        <input id="b">a 32-bit input operand.</input>
+        <input id="aluc">a 6-bit control signal for selecting the operation to be performed.</input>
+        <output id="r">a 32-bit output representing the result of the operation.</output>
+        <output id="zero">a 1-bit output indicating whether the result is zero.</output>
+        <output id="carry">a 1-bit output indicating whether a carry occurred during the operation.</output>
+        <output id="negative">a 1-bit output indicating whether the result is negative.</output>
+        <output id="overflow">a 1-bit output indicating whether an overflow occurred during the operation.</output>
+        <output id="flag">a 1-bit output representing a general flag, which is set based on specific operations (SLT and SLTU).</output>
+    </ports>
+    <parameter_description>
+        <parameter id="WIDTH" value="8"/>
+        <parameter id="DEPTH" value="16"/>
+        <parameter id="ADDR_WIDTH" value="$clog2(DEPTH)">Internal parameter.</parameter>
+    </parameter_description>
+    <logic_description>
+        <description>
+            Notice that below descriptions are along with tags <![CDATA[ <logic />]]>.
+            With a <![CDATA[ <logic type="combinational_logic" />]]>, must construct this logic as interal wire declaration. Or this <![CDATA[ <logic type="combinational_logic" />]]> can be declared as a `reg` but only be used in always(*) block.
+            With a <![CDATA[ <logic type="sequential_logic" />]]>, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other <![CDATA[ <logic type="sequential_logic" />]]> or <![CDATA[ <logic type="combinational_logic" />]]> states.
+            With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, no declaration for this keyword. Just place this operation sequence in below mentioned description.
+            With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
+        </description>
+        <logic type="combinational_logic" id="zero">
+        `zero` flag is active if `res` is all 0.
+        </logic>
+        <logic type="combinational_logic" id="carry">
+        `carry` is equalled to the MSB of the `res` in cases `ADD`, `ADDU`, `SUB` , and `SUBU` alu opcodes. otherwise, `carry` is 0.
+        </logic>
+        <logic type="combinational_logic" id="overflow">
+        In case `ADD` ALU opcode, `overflow` is active if (MSB of `a` is deactive, MSB of `b` is deactive, and MSB of `r` is active) or (MSB of `a` is active, MSB of `b` is active, and MSB of `r` is deactive). In case `SUB` ALU opcode, `overflow` is active if (MSB of `a` is active, MSB of `b` is deactive, and MSB of `r` is deactive) or (MSB of `a` is deactive, MSB of `b` is deactive, and MSB of `r` is active). Otherwise, `overflow` is 0.
+        </logic>
+        <logic type="combinational_logic" id="r">
+        The output `r` is assigned to the first 32 bits of `res`.
+        </logic>
+        <logic type="combinational_logic" id="res">
+        The size of `res` is 33 bits. Operation result of all ALU opcodes. In case of `SLL`, `SRL`, and `SRA`, `res` is result of appropriate shift operations between all 32-bit `b` and all 32-bit `a`. In case of `SLLV`, `SRLV`, and `SRAV`, `res` is result of appropriate shift operations between 32-bit `b` and 5-bit `a`.  Otherwise, `res` is the operation result normally from ADD, ADDU, SUB, SUBU, AND, OR, XOR, NOR, SLT, SLTU, and LUI.
+        </logic>
+        <logic type="combinational_logic" id="negative">
+        `negative` is set to the MSB of the output `r`.
+        </logic>
+        <logic type="combinational_logic" id="flag">
+        In case of `SLT` opcode, `flag` is active if 32-bit signed `a` is less than 32-bit signed `b`. In case of `SLTU` opcode, `flag` is active if 32-bit unsigned `a` is less than 32-bit unsigned `b`. Otherwise, `flag` is set to 0.
+        </logic>
+    </logic_description>
+    <implementation>The module uses parameters to define the control signals for various operations, such as ADD, SUB, AND, OR, etc. 
+The module assigns the input operands to the signed wires and the output result (r) to the lower 32 bits of the register (res[32:0]). The flag output is determined based on the control signal (aluc) and is set to '1' when the operation is SLT or SLTU, and '0' otherwise. The zero output is set to '1' when the result is all zeros, and '0' otherwise.
+Inside the always block, a case statement is used to perform the appropriate operation based on the control signal (aluc). The result is assigned to the register (res) accordingly. For the LUI operation, the upper 16 bits of 'a' are concatenated with 16 zeros to form the result.
+If the control signal (aluc) does not match any defined operation, the result is assigned as '0'.
+Please provide correct `Logic description` fields above to achieve correctness for `alu` design in combinational logics.
+</implementation>
+</module>

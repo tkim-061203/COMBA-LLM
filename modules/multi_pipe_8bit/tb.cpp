@@ -13,9 +13,9 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -80,6 +80,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->mul_a = %x, in->mul_b = %x, in->mul_en_in = %x, in->rst_n = %x", in->mul_a, in->mul_b, in->mul_en_in, in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->mul_en_out = %x, tx->mul_out = %x", tx->mul_en_out, tx->mul_out);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: mul_en_out = %x, mul_out = %x", 0, 0);
 
                 printf("\r\n");
                 fflush(stdout);
@@ -91,9 +92,11 @@ public:
         {
             if (!(tx->mul_out == (in->mul_a * in->mul_b)))
             {
+                uint32_t mul_out = in->mul_a * in->mul_b;
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->mul_a = %x, in->mul_b = %x, in->mul_en_in = %x, in->rst_n = %x", in->mul_a, in->mul_b, in->mul_en_in, in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->mul_en_out = %x, tx->mul_out = %x", tx->mul_en_out, tx->mul_out);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: tx->mul_en_out = %x, mul_out = %x", tx->mul_en_out, mul_out);
 
                 printf("\r\n");
                 fflush(stdout);

@@ -1,11 +1,11 @@
-module RAM #(parameter WIDTH = 6, DEPTH = 8) (
-    input wire clk,
-    input wire rst_n,
-    input wire write_en,
-    input wire [$clog2(DEPTH)-1:0] write_addr,
-    input wire [WIDTH-1:0] write_data,
-    input wire read_en,
-    input wire [$clog2(DEPTH)-1:0] read_addr,
+module RAM #(parameter WIDTH = 8, parameter DEPTH = 256) (
+    input clk,
+    input rst_n,
+    input write_en,
+    input [$clog2(DEPTH)-1:0] write_addr,
+    input [WIDTH-1:0] write_data,
+    input read_en,
+    input [$clog2(DEPTH)-1:0] read_addr,
     output reg [WIDTH-1:0] read_data
 );
 
@@ -29,14 +29,12 @@ module RAM #(parameter WIDTH = 6, DEPTH = 8) (
     // Read operation
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // Reset read_data to 0
-            read_data <= {WIDTH{1'b0}};
+            read_data <= {WIDTH{1'b0}}; // Clear read_data on reset
         end else if (read_en) begin
             // Read data from the specified address
             read_data <= internal_RAM[read_addr];
         end else begin
-            // Clear read_data if read_en is not active
-            read_data <= {WIDTH{1'b0}};
+            read_data <= {WIDTH{1'b0}}; // Clear read_data if not reading
         end
     end
 

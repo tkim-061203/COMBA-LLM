@@ -14,8 +14,8 @@ module serial2parallel(
         if (!rst_n) begin
             cnt <= 4'b0000;
             din_tmp <= 8'b00000000;
-            dout_parallel <= 8'b00000000;
             dout_valid <= 1'b0;
+            dout_parallel <= 8'b00000000;
         end else begin
             if (din_valid && cnt < 4'd8) begin
                 din_tmp <= {din_tmp[6:0], din_serial};

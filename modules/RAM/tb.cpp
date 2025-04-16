@@ -141,6 +141,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->read_addr = 0x%x, in->read_en = 0x%x, in->rst_n = 0x%x, in->write_addr = 0x%x, in->write_data = 0x%x, in->write_en = 0x%x", in->read_addr, in->read_en, in->rst_n, in->write_addr, in->write_data, in->write_en);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->read_data = 0x%x", tx->read_data);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: read_data = 0x%x", 0);
+
                 printf("\r\n");
                 fflush(stdout);
 

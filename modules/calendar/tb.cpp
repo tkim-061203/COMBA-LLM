@@ -134,6 +134,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->RST = 0x%x", in->RST);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->Hours = 0x%x, tx->Mins = 0x%x, tx->Secs = 0x%x", tx->Hours, tx->Mins, tx->Secs);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.Hours = 0x%x, out_tx_ref.Mins = 0x%x, out_tx_ref.Secs = 0x%x", out_tx_ref.Hours, out_tx_ref.Mins, out_tx_ref.Secs);
                 printf("\r\n");
                 fflush(stdout);
 
@@ -155,6 +156,7 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->RST = 0x%x", in->RST);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->Hours = 0x%x, tx->Mins = 0x%x, tx->Secs = 0x%x", tx->Hours, tx->Mins, tx->Secs);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.Hours = 0x%x, out_tx_ref.Mins = 0x%x, out_tx_ref.Secs = 0x%x", out_tx_ref.Hours, out_tx_ref.Mins, out_tx_ref.Secs);
                 printf("\r\n");
                 fflush(stdout);
 

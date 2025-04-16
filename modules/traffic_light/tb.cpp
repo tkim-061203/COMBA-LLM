@@ -143,6 +143,8 @@ public:
                 printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                 printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
                 printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x, green = 0x%x, red = 0x%x, yellow = 0x%x", 0xA, 0, 0, 0);
+
                 printf("\r\n");
                 fflush(stdout);
 
@@ -167,6 +169,8 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
+
                     printf("\r\n");
                     fflush(stdout);
 
@@ -179,6 +183,7 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x3C);
                     printf("\r\n");
                     fflush(stdout);
 
@@ -191,6 +196,7 @@ public:
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x5);
                     printf("\r\n");
                     fflush(stdout);
 
@@ -203,6 +209,7 @@ public:
                     printf("\r\n# TODO 3 NO Failed at simtime %ld %ld", sim_time, tx_data_gen_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
                     printf("\r\n");
                     fflush(stdout);
 

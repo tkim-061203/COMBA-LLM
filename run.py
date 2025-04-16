@@ -24,6 +24,9 @@ parser_runWork.add_argument("modules", nargs="*")
 parser_runWork.add_argument(
     "--llm", action="store_true", help="Run LLM Working Directory"
 )
+parser_runWork.add_argument(
+    "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+)
 
 parser_makeWork = subparsers.add_parser(
     Commands.MAKEWORK.value, help="Make projects with verilog module"
@@ -69,6 +72,21 @@ def createmodule():
         newDescriptionFile.close()
     else:
         print("\t- No override exist Description!")
+
+    #
+    newDescriptonXMLPath = os.path.normpath(
+        os.path.join(newModulePath, Template.DESCRIPTIONXMLFILENAME.value)
+    )
+    if not os.path.isfile(newDescriptonXMLPath):
+        with open(
+        f"{Template.TEMPLATEFOLDER.value}/{Template.DESCRIPTIONXMLFILENAME.value}", "r"
+        ) as descriptionXMLTemplateFIle:
+            formattedDescriptionXMLContent = descriptionXMLTemplateFIle.read()
+
+        with open(newDescriptonXMLPath, "w") as newDescriptionXMLFile:
+            newDescriptionXMLFile.write(formattedDescriptionXMLContent)
+    else:
+        print("\t- No override exist XML Description!")
 
     #
     tbTemplateFIle = open(
@@ -145,11 +163,12 @@ def makeWorkingFolder(
 
         moduleNameWorkPath = os.path.join(workFolderName, moduleName)
 
-        if not os.path.isdir(moduleNameWorkPath):
-            os.mkdir(moduleNameWorkPath)
-        elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
+        # if not os.path.isdir(moduleNameWorkPath):
+        #     os.mkdir(moduleNameWorkPath)
+        # elif input(f'Delete exist work dir "{moduleNameWorkPath}"? (y/n) ') == "y":
+        if os.path.isdir(moduleNameWorkPath):
             shutil.rmtree(moduleNameWorkPath)
-            os.mkdir(moduleNameWorkPath)
+        os.mkdir(moduleNameWorkPath)
 
         tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
         tbModulePath = os.path.join(modulePath, tbModuleFileName)
@@ -200,15 +219,16 @@ def runFlow(
     modulePaths: typing.List[str],
     workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
+    desciptionType='txt'
 ):
     # makeverified(modules)
     moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
 
     for moduleNormPath in moduleNormPaths:
         moduleName = os.path.basename(moduleNormPath)
-        moduleNameWorkPath = os.path.join(workFolderName, moduleName)
-        if not os.path.isdir(moduleNameWorkPath):
-            makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
+        # moduleNameWorkPath = os.path.join(workFolderName, moduleName)
+        # if not os.path.isdir(moduleNameWorkPath):
+        makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
 
         #
         print("flow here", moduleNormPath, moduleName)
@@ -218,6 +238,7 @@ def runFlow(
             llm_model="gpt-4o-mini-2024-07-18",
             model_provider="openai",
             temperature=0,
+            descriptionType=desciptionType
         )
         llmCodeAgent()
 
@@ -226,7 +247,7 @@ match args.command:
     case Commands.CREATEMODULE.value:
         createmodule()
     case Commands.RUNWORK.value:
-        runFlow(args.modules, *generateWorkFolderArgument(args.llm))
+        runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype,)))
     case Commands.MAKEWORK.value:
         makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
     case Commands.GENERATE.value:

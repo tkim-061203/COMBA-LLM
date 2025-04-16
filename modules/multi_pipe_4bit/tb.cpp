@@ -13,9 +13,9 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -79,9 +79,11 @@ public:
             {
                 if (!(tx->mul_out == (in->mul_a * in->mul_b)))
                 {
+                    uint16_t mul_out = in->mul_a * in->mul_b;
                     printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
                     printf("\r\n# TODO 3 INPUT TRACE: in->mul_a = 0x%x, in->mul_b = 0x%x", in->mul_a, in->mul_b);
                     printf("\r\n# TODO 3 OUTPUT TRACE: tx->mul_out = 0x%x", tx->mul_out);
+                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: mul_out = 0x%x", mul_out);
 
                     printf("\r\n");
                     fflush(stdout);

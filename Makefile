@@ -3,18 +3,18 @@ WORKDIR?=.work
 DESIGNS=$(patsubst ./${WORKDIR}/%, %, $(shell find ./${WORKDIR} -maxdepth 1 -mindepth 1 -type d))
 # VERILATOR_WNO=ENUMVALUE DECLFILENAME GENUNNAMED PINCONNECTEMPTY UNOPTFLAT
 # VERILATOR_WNO=WIDTHEXPAND UNUSEDSIGNAL
-VERILATOR_WNO=
+VERILATOR_WNO=DECLFILENAME
 # $(patsubst %, -Wno-%, $(VERILATOR_WNO))
 define verilating_template
 ./${WORKDIR}/$(1)/obj_dir/V$(1).h: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
 	@ echo "###Verilating for $(1)###"
-	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
+	@ cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --trace --x-assign 0 --x-initial 0 -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
 endef
 
 define lintonly_verilating_template
 ./${WORKDIR}/$(1)/lint: ${WORKDIR}/$(1)/tb.cpp $(wildcard ${WORKDIR}/$(1)/*.v)
 	@ echo "###Verilating for $(1)###"
-	cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --lint-only --trace --x-assign unique --x-initial unique -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
+	cd ${WORKDIR}/$(1) && bash -c "verilator_yosys.sh verilator $$$$PWD $(patsubst %, -D%, $(DEFINES)) -Wall -j 0 --lint-only --trace --x-assign 0 --x-initial 0 -cc --top-module $(1) $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.v, $$^)) --exe $$(patsubst ${WORKDIR}/$(1)/%, %, $$(filter %.cpp, $$^)) -Wno-fatal -Wall $(patsubst %, -Wno-%, $(VERILATOR_WNO))"
 endef
 
 define binmake_template
@@ -37,14 +37,6 @@ define docker_run_template
 ./${WORKDIR}/$(1)/docker_run:
 	@ bash -c "verilator_yosys.sh bash $$$$PWD -c \"./${WORKDIR}/$(1)/obj_dir/V$(1)\""
 endef
-
-# all:
-# 	@echo ${DESIGNS}
-# 	# @echo $(foreach design, $(DESIGNS), $(call verilating_template,$(design)))
-# 	@exit 1;
-
-# all:
-# 	echo $(patsubst %, -Wno-%, $(VERILATOR_WNO))
 
 $(foreach design, $(DESIGNS), $(eval $(call verilating_template,$(design))))
 $(foreach design, $(DESIGNS), $(eval $(call binmake_template,$(design))))

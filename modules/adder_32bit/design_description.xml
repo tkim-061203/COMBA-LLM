@@ -1,0 +1,10 @@
+<module id="adder_32bit">
+    <description>Implement a module of a carry-lookahead 32-bit adder that uses the Carry-Lookahead Adder (CLA) architecture.</description>
+    <ports>
+        <input id="A" width_description="[32:1]">32-bit input operand A.</input>
+        <input id="B" width_description="[32:1]">32-bit input operand B.</input>
+        <output id="S" width_description="[32:1]">32-bit output representing the sum of A and B.</output>
+        <output id="C32">Carry-out output.</output>
+    </ports>
+    <implementation>The top module adder_32bit consists of several instances of the 16 bit CLA block you design.</implementation>
+</module>
