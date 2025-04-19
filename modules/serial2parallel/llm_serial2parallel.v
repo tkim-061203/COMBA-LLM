@@ -12,21 +12,21 @@ module serial2parallel(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            cnt <= 4'b0000;
-            din_tmp <= 8'b00000000;
-            dout_valid <= 1'b0;
-            dout_parallel <= 8'b00000000;
+            cnt <= 0;
+            din_tmp <= 0;
+            dout_parallel <= 0;
+            dout_valid <= 0;
         end else begin
-            if (din_valid && cnt < 4'd8) begin
+            if (din_valid && cnt < 8) begin
                 din_tmp <= {din_tmp[6:0], din_serial};
                 cnt <= cnt + 1;
             end
-            if (cnt == 4'd7) begin
+            if (cnt == 7) begin
                 dout_parallel <= din_tmp;
-                dout_valid <= 1'b1;
-                cnt <= 4'b0000; // Reset counter after 8 bits
+                dout_valid <= 1;
+                cnt <= 0; // Reset counter after 8 bits
             end else begin
-                dout_valid <= 1'b0;
+                dout_valid <= 0;
             end
         end
     end

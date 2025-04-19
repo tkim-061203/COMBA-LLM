@@ -23,7 +23,7 @@ import datetime
 from operator import add
 from dotenv import load_dotenv
 from .xmlDescription import Module, Modules
-# from pydantic import BaseModel, Field
+from tqdm import tqdm
 
 
 class CodeOutput(TypedDict):
@@ -364,6 +364,8 @@ class LLMCodeAgent:
                 
                 if (firstException["exceptionTitle"] not in self._verilator_warns) and (
                  firstException["exceptionTitle"] != None):
+                    with open('reports/log/log.txt', 'a') as file:
+                        print(f'Module: {self._moduleName} - New addition content for Verilator warning "{firstException['exceptionTitle']}"', firstException, sep='\n', file=file)
                     print("firstException", firstException)
                     if (
                         self.customInput(f'New addition content for Verilator warning "{firstException['exceptionTitle']}"?', 'syntax_compile')
@@ -884,6 +886,9 @@ Here are the content of the testbench code of the Verilog module:
         self._iteration_time_limit = 4 if not self.is_verified_flow else 1
 
         self.status = "error"
+        self._tqdm = {
+            "__call__": tqdm(total=(self._iteration_time_limit + 1), desc='Trial')
+        }
         return self
 
     def __call__(self):
@@ -899,6 +904,7 @@ Here are the content of the testbench code of the Verilog module:
         }
 
         for iter_report, exception, tb_failed in myiter:
+            self._tqdm['__call__'].update(1)
             json_dumps_report["exception_trial"].append(exception)
             json_dumps_report["tb_failed_trial"].append(tb_failed)
             json_dumps_report["state_trial"].append(iter_report)

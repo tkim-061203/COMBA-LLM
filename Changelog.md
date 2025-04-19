@@ -22,6 +22,14 @@
 - Verifier for sequential and combinational verification after Verilog generation.
 - [ ] Global debug log for `New addition content for Verilator warning`.
 
+## 3.2.0
+
+`19-04-2025`
+
+- `glob` approach for command `run`.
+- `tqdm` for command `run`.
+- Log file for new Addition content.
+
 ## 3.1.0
 
 - Usage `-Werror-<message> Convert warnings to errors`.

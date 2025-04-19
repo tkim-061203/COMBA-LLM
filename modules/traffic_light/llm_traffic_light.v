@@ -8,10 +8,14 @@ module traffic_light(
     output reg green
 );
 
-    parameter idle = 2'b00, s1_red = 2'b01, s2_yellow = 2'b10, s3_green = 2'b11;
+    parameter idle = 2'b00;
+    parameter s1_red = 2'b01;
+    parameter s2_yellow = 2'b10;
+    parameter s3_green = 2'b11;
+
+    reg [7:0] cnt;
     reg [1:0] state;
-    reg [5:0] cnt;
-    reg p_red, p_yellow, p_green;
+    reg p_red, p_green, p_yellow;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -44,17 +48,17 @@ module traffic_light(
         end
     end
 
-    assign clock = {2'b00, cnt}; // Expanding cnt to 8 bits by concatenating 2'b00
+    assign clock = cnt;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             p_red <= 0;
-            p_yellow <= 0;
             p_green <= 0;
+            p_yellow <= 0;
         end else begin
             p_red <= (state == s1_red);
-            p_yellow <= (state == s2_yellow);
             p_green <= (state == s3_green);
+            p_yellow <= (state == s2_yellow);
         end
     end
 

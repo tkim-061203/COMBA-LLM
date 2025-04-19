@@ -29,7 +29,7 @@ module fsm(
         endcase
     end
 
-    // Sequential logic for state update
+    // Sequential logic for current state
     always @(posedge CLK or posedge RST) begin
         if (RST) begin
             ST_cr <= s0;

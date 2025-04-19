@@ -15,10 +15,10 @@ module cla_4bit(
     assign g = a & b;
 
     assign c[0] = cin;
-    assign c[1] = g[0] | (p[0] & c[0]);
-    assign c[2] = g[1] | (p[1] & c[1]);
-    assign c[3] = g[2] | (p[2] & c[2]);
-    assign c[4] = g[3] | (p[3] & c[3]);
+    assign c[1] = g[0] ^ (p[0] & c[0]);
+    assign c[2] = g[1] ^ (p[1] & c[1]);
+    assign c[3] = g[2] ^ (p[2] & c[2]);
+    assign c[4] = g[3] ^ (p[3] & c[3]);
 
     assign sum = p ^ c[3:0];
     assign cout = c[4];
@@ -77,10 +77,10 @@ module cla_16bit(
     );
 
     assign c[0] = cin;
-    assign c[1] = g[0] | (p[0] & c[0]);
-    assign c[2] = g[1] | (p[1] & c[1]);
-    assign c[3] = g[2] | (p[2] & c[2]);
-    assign c[4] = g[3] | (p[3] & c[3]);
+    assign c[1] = g[0] ^ (p[0] & c[0]);
+    assign c[2] = g[1] ^ (p[1] & c[1]);
+    assign c[3] = g[2] ^ (p[2] & c[2]);
+
 endmodule
 
 
@@ -91,7 +91,7 @@ module adder_32bit(
     output C32
 );
     wire [15:0] sum0, sum1;
-    wire cout0;
+    wire cout0, cout1;
 
     cla_16bit cla_low(
         .a(A[15:0]),
@@ -100,6 +100,7 @@ module adder_32bit(
         .sum(sum0),
         .cout(cout0)
     );
+
     cla_16bit cla_high(
         .a(A[31:16]),
         .b(B[31:16]),

@@ -9,7 +9,6 @@ module alu(
     output overflow,
     output flag
 );
-
     parameter ADD  = 6'b100000;
     parameter ADDU = 6'b100001;
     parameter SUB  = 6'b100010;
@@ -28,36 +27,34 @@ module alu(
     parameter SRAV = 6'b000111;
     parameter LUI  = 6'b001111;
 
-    reg [32:0] res; // Changed from wire to reg
-
-    always @(*) begin
-        case (aluc)
-            ADD, ADDU: res = {1'b0, a} + {1'b0, b};
-            SUB, SUBU: res = {1'b0, a} - {1'b0, b};
-            AND: res = {1'b0, a} & {1'b0, b}; // Fixed width expansion
-            OR:  res = {1'b0, a} | {1'b0, b}; // Fixed width expansion
-            XOR: res = {1'b0, a} ^ {1'b0, b}; // Fixed width expansion
-            NOR: res = ~({1'b0, a} | {1'b0, b}); // Fixed width expansion
-            SLL: res = {1'b0, b} << a; // Fixed width expansion for shift
-            SRL: res = {1'b0, b} >> a; // Fixed width expansion for shift
-            SRA: res = $signed({1'b0, b}) >>> a; // Fixed width expansion for signed shift
-            SLLV: res = {1'b0, b} << a[4:0]; // Fixed width expansion for shift
-            SRLV: res = {1'b0, b} >> a[4:0]; // Fixed width expansion for shift
-            SRAV: res = $signed({1'b0, b}) >>> a[4:0]; // Fixed width expansion for signed shift
-            LUI: res = {a[15:0], 16'b0}; // Fixed width expansion
-            SLT: res = ($signed(a) < $signed(b)) ? 1 : 0;
-            SLTU: res = (a < b) ? 1 : 0;
-            default: res = 33'b0;
-        endcase
-    end
+    wire [32:0] res;
+    assign res = (aluc == SLL) ? {1'b0, b << a} :
+                 (aluc == SRL) ? {1'b0, b >> a} :
+                 (aluc == SRA) ? {b[31], b >> a} :
+                 (aluc == SLLV) ? {1'b0, b << a[4:0]} :
+                 (aluc == SRLV) ? {1'b0, b >> a[4:0]} :
+                 (aluc == SRAV) ? {b[31], b >> a[4:0]} :
+                 (aluc == ADD)  ? a + b :
+                 (aluc == ADDU) ? a + b :
+                 (aluc == SUB)  ? a - b :
+                 (aluc == SUBU) ? a - b :
+                 (aluc == AND)  ? {1'b0, a} & {1'b0, b} :
+                 (aluc == OR)   ? {1'b0, a} | {1'b0, b} :
+                 (aluc == XOR)  ? {1'b0, a} ^ {1'b0, b} :
+                 (aluc == NOR)  ? ~({1'b0, a} | {1'b0, b}) :
+                 (aluc == SLT)  ? {32'b0, (a < b)} :
+                 (aluc == SLTU) ? {32'b0, ($unsigned(a) < $unsigned(b))} :
+                 (aluc == LUI)  ? {a[15:0], 16'b0} :
+                 33'b0;
 
     assign r = res[31:0];
     assign zero = (r == 32'b0);
     assign carry = (aluc == ADD || aluc == ADDU || aluc == SUB || aluc == SUBU) ? res[32] : 1'b0;
     assign overflow = (aluc == ADD) ? ((~a[31] & ~b[31] & r[31]) | (a[31] & b[31] & ~r[31])) :
-                        (aluc == SUB) ? ((a[31] & ~b[31] & ~r[31]) | (~a[31] & ~b[31] & r[31])) : 1'b0;
+                       (aluc == SUB) ? ((a[31] & ~b[31] & ~r[31]) | (~a[31] & ~b[31] & r[31])) :
+                       1'b0;
     assign negative = r[31];
-    assign flag = (aluc == SLT) ? ($signed(a) < $signed(b)) :
-                  (aluc == SLTU) ? (a < b) : 1'b0;
-
+    assign flag = (aluc == SLT) ? (a < b) :
+                  (aluc == SLTU) ? ($unsigned(a) < $unsigned(b)) :
+                  1'b0;
 endmodule

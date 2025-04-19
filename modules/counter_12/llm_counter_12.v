@@ -16,5 +16,4 @@ module counter_12(
             end
         end
     end
-
 endmodule

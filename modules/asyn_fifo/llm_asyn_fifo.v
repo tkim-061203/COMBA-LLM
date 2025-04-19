@@ -34,8 +34,8 @@ module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (
     input wire winc,
     input wire rinc,
     input wire [WIDTH-1:0] wdata,
-    output reg wfull,
-    output reg rempty,
+    output wire wfull,
+    output wire rempty,
     output reg [WIDTH-1:0] rdata
 );
 
@@ -50,8 +50,8 @@ module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (
     reg [ADDR_WIDTH:0] rptr_syn;
     reg [ADDR_WIDTH:0] wptr_syn;
 
-    wire ren = rinc && !rempty;
     wire wen = winc && !wfull;
+    wire ren = rinc && !rempty;
 
     // Write address logic
     always @(posedge wclk or negedge wrstn) begin
@@ -124,13 +124,11 @@ module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (
     end
 
     // Full and empty logic
-    always @* begin
-        wfull = (wptr == {~rptr_syn[ADDR_WIDTH:ADDR_WIDTH-1], rptr_syn[ADDR_WIDTH-2:0]});
-        rempty = (rptr == wptr_syn);
-    end
+    assign wfull = (wptr == {~rptr_syn[ADDR_WIDTH:ADDR_WIDTH-1], rptr_syn[ADDR_WIDTH-2:0]});
+    assign rempty = (rptr == wptr_syn);
 
-    // Instantiate dual-port RAM
-    dual_port_RAM #(.WIDTH(WIDTH), .DEPTH(DEPTH)) ram (
+    // Dual-port RAM instantiation
+    dual_port_RAM #(.WIDTH(WIDTH), .DEPTH(DEPTH)) ram_inst (
         .wclk(wclk),
         .wenc(wen),
         .waddr(waddr_bin[ADDR_WIDTH-1:0]),

@@ -9,7 +9,7 @@ module right_shifter(
     end
 
     always @(posedge clk) begin
-        q <= {d, q[7:1]}; // Right shift and insert new input
+        q <= {d, q[7:1]}; // Right shift and insert d into MSB
     end
 
 endmodule
