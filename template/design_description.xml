@@ -1,98 +1,73 @@
-<module id="div_8bit">
-    <description>Implement a simplified radix-2 divider on 8-bit signed or unsigned integers. and the inputs are two 8-bit operands. The module accepts a dividend and a divisor as inputs and provides a 16-bit result containing both the quotient and the remainder. The design supports both signed and unsigned division operations.</description>
+<module id="multi_pipe_8bit">
+    <description>Implement the design of unsigned 8bit multiplier based on pipelining processing. It utilizes a clock signal (clk), an active-low reset signal (rst_n), an input enable signal (mul_en_in), and provides an output enable signal (mul_en_out) and the product output (mul_out) of size 16 bits.</description>
     <ports>
         <input id="clk">Clock signal used for synchronous operation.</input>
-        <input id="rst">The reset signal to initialize or reset the module.</input>
-        <input id="sign">1-bit indicates if the operation is signed (1) or unsigned (0).</input>
-        <input id="dividend">8-bit input signal representing the dividend for division.</input>
-        <input id="divisor">8-bit input signal representing the divisor for division.</input>
-        <input id="opn_valid">1-bit indicates that a valid operation request is present.</input>
-        <input id="res_ready">1-bit indicates that the 16-bit output result has already been acknowledged.</input>
-        <output id="res_valid">1-bit output signal indicating the result is valid and ready. res_valid must be constructed as combinational logic and not in any always block. So `res_valid` must not be declared as register.</output>
-        <output id="result">16-bit the output containing the remainder in the upper 8 bits and the quotient in the lower 8 bits.</output>
+        <input id="rst_n">Active-low reset signal. Defined as 0 for chip reset and 1 for reset signal inactive.</input>
+        <input id="mul_en_in">Input enable signal that controls the multiplication operation.</input>
+        <input id="mul_a">Input signal representing the multiplicand with a data width of 8 bits.</input>
+        <input id="mul_b">Input signal representing the multiplier with a data width of 8 bits.</input>
+        <output id="mul_en_out">Output enable signal indicating if the multiplication operation is enabled.</output>
+        <output id="mul_out">Product output signal with a data width of 16 bits.</output>
     </ports>
     <logic_description>
         <description>
-            Notice that below descriptions are along with tags <![CDATA[ <logic />]]>.
+            Notice that below descriptions are along with tags <![CDATA[ <logic />]]>. These tags <![CDATA[ <logic />]]> could be described more detail in the below description in the <![CDATA[ <implementation />]]> tag.
             With a <![CDATA[ <logic type="combinational_logic" />]]>, must construct this logic as interal wire declaration. Or this <![CDATA[ <logic type="combinational_logic" />]]> can be declared as a `reg` but only be used in always(*) block.
             With a <![CDATA[ <logic type="sequential_logic" />]]>, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other <![CDATA[ <logic type="sequential_logic" />]]> or <![CDATA[ <logic type="combinational_logic" />]]> states.
             With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, no declaration for this keyword. Just place this operation sequence in below mentioned description.
             With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
+            With a <![CDATA[ <logic id="temp" />]]> tag with width_description and depth_description attributes declaration, such as <![CDATA[ <logic id="temp" width_description="[a:b]" depth_description="[c:d]"/>]]>, it must be declared as `wire [a:b] temp [c:d]` if its type is a `combinational_logic`. Otherwise, the logic must be declared as `reg [a:b] temp [c:d]` if its type is a `sequential_logic` or a `combinational_logic` driven in a `alway @(*)` block.
         </description>
-        <logic type="combinational_logic" id="divisor_extend">
-        9-bit combinational logic. <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 1 and input <![CDATA[ <input refid="divisor">]]> if the input <![CDATA[ <input refid="sign">]]> and MSB of input <![CDATA[ <input refid="divisor">]]> is high. Otherwise, <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 0 and input <![CDATA[ <logic refid="divisor">]]>.
+        <logic type="sequential_logic" id="mul_a_reg">
+        8-bit sequential logic.
+        If <![CDATA[ <input refid="rst_n" />]]> is deactive, <![CDATA[ <logic refid="mul_a_reg" />]]> is reset to 0.
+        Otherwise, <![CDATA[ <logic refid="mul_a_reg" />]]> is set to <![CDATA[ <input refid="mul_a" />]]> if <![CDATA[ <input refid="mul_en_in" />]]> is active, else <![CDATA[ <logic refid="mul_a_reg" />]]> is set to 0.
         </logic>
-        <logic type="sequential_logic" id="NEG_DIVISOR">
-        9-bit sequencial logic.
+        <logic type="sequential_logic" id="mul_b_reg">
+        8-bit sequential logic.
+        If <![CDATA[ <input refid="rst_n" />]]> is deactive, <![CDATA[ <logic refid="mul_b_reg" />]]> is reset to 0.
+        Otherwise, <![CDATA[ <logic refid="mul_b_reg" />]]> is set to <![CDATA[ <input refid="mul_b" />]]> if <![CDATA[ <input refid="mul_en_in" />]]> is active, else <![CDATA[ <logic refid="mul_a_reg" />]]> is set to 0.
         </logic>
-        <logic type="combinational_logic" id="all_sub_result">
-        10-bit combinational logic.
-        </logic>
-        <logic type="combinational_logic" id="sub_result">
-        9-bit combinational logic. <![CDATA[ <logic refid="sub_result">]]> is the first 9-bit of <![CDATA[ <logic refid="all_sub_result">]]>.
-        </logic>
-        <logic type="combinational_logic_operation" id="sub_remainer_reg_divisor">
-        combinational logic operation. 10-bit <![CDATA[ <logic refid="all_sub_result">]]> is set to summation of <![CDATA[ <logic refid="REMAINER">]]> and <![CDATA[ <logic refid="NEG_DIVISOR">]]>.
-        </logic>
-        <logic type="combinational_logic" id="REMAINER">
-        8-bit combinational logic. This is a subsection of 8-bit MSB of <![CDATA[ <logic refid="SR">]]>.
-        </logic>
-        <logic type="sequential_logic" id="SR">
-        The 16-bit shift register.
-        </logic>
-        <logic type="combinational_logic" id="QUOTIENT">
-        8-bit combinational logic. This is a subsection of 8-bit LSB of <![CDATA[ <logic refid="SR">]]>.
-        </logic>
-        <logic type="combinational_logic" id="CO">
-        1-bit combinational logic. <![CDATA[ <logic refid="CO">]]> is set to the MSB of <![CDATA[ <logic refid="all_sub_result">]]>.
-        </logic>
-        <logic type="combinational_logic" id="mux_result">
-        9-bit combinational logic. If <![CDATA[ <logic refid="CO">]]> is high, <![CDATA[ <logic refid="mux_result">]]> is set to <![CDATA[ <logic refid="sub_result">]]> else set to <![CDATA[ <logic refid="REMAINER">]]>.
-        </logic>
-        <logic type="combinational_logic" id="quotient_shift">
-        7-bit combinational logic. <![CDATA[ <logic refid="quotient_shift">]]> is set to 7 [7:1] bits of <![CDATA[ <logic refid="SR">]]>.
-        </logic>
-        <logic type="sequential_logic_operation" id="SR_final_update">
-        First, the 8-bit MSB of <![CDATA[ <logic refid="SR">]]> is set to 8-bit <![CDATA[ <logic refid="mux_result">]]>. Then bit [0:0] of <![CDATA[ <logic refid="SR">]]> is set to <![CDATA[ <logic refid="CO">]]>.
-        </logic>
-        <logic type="sequential_logic_operation" id="SR_shifting">
-        Concatenate <![CDATA[ <logic refid="SR">]]> from of first 7-bit of <![CDATA[ <logic refid="mux_result">]]>, 7-bit <![CDATA[ <logic refid="quotient_shift">]]>, 1-bit <![CDATA[ <logic refid="CO">]]>, and 1-bit zero.
-        </logic>
-        <logic type="combinational_logic" id="dividend_abs">
-        8-bit combinational logic. If <![CDATA[ <input refid="sign">]]> and the MSB of input <![CDATA[ <input refid="dividend">]]> is high, <![CDATA[ <logic refid="dividend_abs">]]> is set to two's complement of the input <![CDATA[ <input refid="dividend">]]>. Otherwise <![CDATA[ <logic refid="dividend_abs">]]> is set to the original input <![CDATA[ <logic refid="dividend">]]> only.
-        </logic>
-        <logic type="combinational_logic" id="final_remainer">
-        8-bit combinational logic. <![CDATA[ <logic refid="final_remainer">]]> is set to two's complement of <![CDATA[ <logic refid="REMAINER">]]> if the <![CDATA[ <input refid="sign">]]> bit and MSB of register <![CDATA[ <input refid="dividend">]]> is high. Otherwise, <![CDATA[ <logic refid="final_remainer">]]> is set to <![CDATA[ <logic refid="REMAINER">]]>.
-        </logic>
-        <logic type="combinational_logic" id="final_quotient">
-        8-bit combinational logic. <![CDATA[ <logic refid="final_quotient">]]> is set to two's complement of <![CDATA[ <logic refid="QUOTIENT">]]> if <![CDATA[ <logic refid="is_final_quotient_sign">]]> is high. Otherwise, <![CDATA[ <logic refid="final_remainer">]]> is set to <![CDATA[ <logic refid="QUOTIENT">]]>.
-        </logic>
-        <logic type="combinational_logic" id="is_final_quotient_sign">
-        1-bit combinational logic. <![CDATA[ <logic refid="is_final_quotient_sign">]]> is result of the `and` logic of <![CDATA[ <input refid="sign">]]> and the `xor` logic of MSB of <![CDATA[ <input refid="QUOTIENT">]]> register and MSB of <![CDATA[ <logic refid="divisor">]]> register.
+        <logic type="combinational_logic" id="temp" width_description="[15:0]" depth_description="[7:0]">
+        <![CDATA[ <logic refid="temp" />]]> is a logic with 16-bit width and 8-bit depth, `[15:0] temp [7:0]`.
+        `temp[0]` is set to value of shift-left-0 of `mul_a_reg` if `mul_b_reg[0]` is active.
+        `temp[1]` is set to value of shift-left-1 of `mul_a_reg` if `mul_b_reg[1]` is active.
+        etc, ...
+        `temp[7]` is set to value of shift-left-7 of `mul_a_reg` if `mul_b_reg[7]` is active.
         </logic>
     </logic_description>
-    <implementation>Operation Start:
-When opn_valid is high, res_valid is low, and start_cnt is low, the module saves the inputs dividend and divisor in to 2 8-bit corresponding regisers.
-Initializes the 16-bit shift register SR with the absolute value of the original input `dividend` (dividend_abs) shifted left by one bit.
-9-bit NEG_DIVISOR is set to `divisor_extend`, if the sign bit and MSB of divisor is high. Otherwise, sets 9-bit NEG_DIVISOR to two's complement of the `divisor_extend`.
-Sets the 4-bit counter cnt to 1 and start_cnt to 1 to begin the division process.
+    <implementation>The module utilizes a pipeline architecture to improve performance. It consists of several key components:
+Input Control:
+The module includes an input enable signal, mul_en_in, which controls the multiplication operation.
+On the positive edge of the clock signal, the module samples the input enable signal and stores it in a 3-bit register, mul_en_out_reg.
+The value `3-bit` of width of the mul_en_out_reg is assumed that this multiplier has 3 stages. Especifically, on every positive edge of the clock signal, the mul_en_out_reg is concatenated by its previous first two bits and the bit value of the mul_en_in.
+The output enable signal, mul_en_out, is derived from the most significant bit of mul_en_out_reg, indicating whether the multiplication result is enabled.
+If the (rst_n) is inactive, the (mul_en_out) is reset to zero.
 
-Division Process(If start_cnt is high, the module performs the following steps):
-If most significant bit of cnt is set (the counter cnt reaches 8), the division is complete:
-cnt and start_cnt are cleared. Then, based on SR_final_update method, Updates the shift register SR with the final remainder and quotient.
-Otherwise, the counter cnt is incremented, and the shift register SR is updated based on the subtraction result `mux_result`:
-Based on `sub_remainer_reg_divisor`, compute the summation of `NEG_DIVISOR` and `REMAINER`.
-Uses a multiplexer to select the appropriate result based on the carry-out.
-Based on `SR_shifting`, updates SR.
+Input Registers:
+The module includes registers, mul_a_reg and mul_b_reg, to store the input multiplicand and multiplier, respectively.
+On the positive edge of the clock signal, the module samples the input values and stores them in the corresponding registers.
+The registers are only updated when the input enable signal is active.
 
-Result Validity:
-res_valid is managed based on the reset signal, the counter, and whether the result has been consumed, which is signaled by the input (res_ready).
-`res_valid` should be update directly, without passing middle register value.
-`res_valid` is set to zero if `rst` is high. 
-Otherwise, if `cnt` reaches 8, `res_ready` is set to 1. 
-Otherwise, if `res_valid` and `res_ready` is all high, `res_valid` is set to 0. Otherwise, `res_valid` is set to `res_valid`.
+Partial Product Generation:
+The module generates partial products by performing bitwise operations between the multiplicand and the individual bits of the multiplier.
+It uses conditional assignments to select the appropriate bits from the multiplicand based on the multiplier bits.
+The partial products are stored in a set of wires, <![CDATA[ <logic refid="temp" />]]>, with each wire <![CDATA[ <logic id="temp" />]]> representing a different bit position.
 
-Result operation:
-The output `result` is constructed as combinational logic and is set to concatenation of `final_remainer` and `final_quotient`. Notice that, because of combinational operation, the `result` must not be calculated in any always block.
+Partial Sum Calculation:
+The module performs addition operations on the partial products to calculate partial sums.
+It uses a set of registers, sum, to store the intermediate sum values.
+Each register corresponds to a group of partial products and is updated on the positive edge of the clock signal.
+
+Final Product Calculation:
+The module sums up all the partial sums to obtain the final product.
+It uses a register, mul_out_reg, to store the accumulated sum.
+On the positive edge of the clock signal, the register is updated with the sum of all partial sums.
+
+Output Assignment:
+The module assigns the output product value, mul_out, based on the output enable signal and the value in mul_out_reg.
+If the output enable signal is active, indicating a valid product, the value in mul_out_reg is assigned to mul_out.
+Otherwise, mul_out is set to 0.
+Notice that the (mul_en_out) is asserted based on the `the most significant bit of mul_en_out_reg`. So, to ensure that all the (mul_en_out) and (mul_out) are asserted in the same clock (clk) cycle, the (mul_out) is also asserted based on the `the most significant bit of mul_en_out_reg`.
 </implementation>
 </module>

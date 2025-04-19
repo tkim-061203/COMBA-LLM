@@ -13,7 +13,7 @@
     </ports>
     <logic_description>
         <description>
-            Notice that below descriptions are along with tags <![CDATA[ <logic />]]>. These tags <![CDATA[ <logic />]]> could be described more detail in the below description in the <![CDATA[ <implementation />]]> tag.
+            Notice that below descriptions are along with tags <![CDATA[ <logic />]]>.
             With a <![CDATA[ <logic type="combinational_logic" />]]>, must construct this logic as interal wire declaration. Or this <![CDATA[ <logic type="combinational_logic" />]]> can be declared as a `reg` but only be used in always(*) block.
             With a <![CDATA[ <logic type="sequential_logic" />]]>, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other <![CDATA[ <logic type="sequential_logic" />]]> or <![CDATA[ <logic type="combinational_logic" />]]> states.
             With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, no declaration for this keyword. Just place this operation sequence in below mentioned description.
@@ -23,7 +23,7 @@
         9-bit combinational logic. <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 1 and input <![CDATA[ <input refid="divisor">]]> if the input <![CDATA[ <input refid="sign">]]> and MSB of input <![CDATA[ <input refid="divisor">]]> is high. Otherwise, <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 0 and input <![CDATA[ <logic refid="divisor">]]>.
         </logic>
         <logic type="sequential_logic" id="NEG_DIVISOR">
-        9-bit sequencial logic. Follow the below description in the <![CDATA[ <implementation />]]> tag for more detail in this sequential logic.
+        9-bit sequencial logic.
         </logic>
         <logic type="combinational_logic" id="all_sub_result">
         10-bit combinational logic.
@@ -50,7 +50,7 @@
         9-bit combinational logic. If <![CDATA[ <logic refid="CO">]]> is high, <![CDATA[ <logic refid="mux_result">]]> is set to <![CDATA[ <logic refid="sub_result">]]> else set to <![CDATA[ <logic refid="REMAINER">]]>.
         </logic>
         <logic type="combinational_logic" id="quotient_shift">
-        7-bit combinational logic. <![CDATA[ <logic refid="quotient_shift">]]> is set to 7 bits [7:1] of <![CDATA[ <logic refid="SR">]]>.
+        7-bit combinational logic. <![CDATA[ <logic refid="quotient_shift">]]> is set to 7 [7:1] bits of <![CDATA[ <logic refid="SR">]]>.
         </logic>
         <logic type="sequential_logic_operation" id="SR_final_update">
         First, the 8-bit MSB of <![CDATA[ <logic refid="SR">]]> is set to 8-bit <![CDATA[ <logic refid="mux_result">]]>. Then bit [0:0] of <![CDATA[ <logic refid="SR">]]> is set to <![CDATA[ <logic refid="CO">]]>.
@@ -68,21 +68,18 @@
         8-bit combinational logic. <![CDATA[ <logic refid="final_quotient">]]> is set to two's complement of <![CDATA[ <logic refid="QUOTIENT">]]> if <![CDATA[ <logic refid="is_final_quotient_sign">]]> is high. Otherwise, <![CDATA[ <logic refid="final_remainer">]]> is set to <![CDATA[ <logic refid="QUOTIENT">]]>.
         </logic>
         <logic type="combinational_logic" id="is_final_quotient_sign">
-        1-bit combinational logic. <![CDATA[ <logic refid="is_final_quotient_sign">]]> is result of the `and` logic of <![CDATA[ <input refid="sign">]]> and the `xor` logic of MSB of <![CDATA[ <input refid="dividend">]]> register and MSB of <![CDATA[ <logic refid="divisor">]]> register.
-        </logic>
-        <logic type="sequential_logic" id="start_cnt">
-        1-bit sequential logic. When <![CDATA[ <input refid="rst">]]> is high, <![CDATA[ <input refid="start_cnt">]]> is reset to 0. Otherwise, follow the below description in the <![CDATA[ <implementation />]]> tag.
+        1-bit combinational logic. <![CDATA[ <logic refid="is_final_quotient_sign">]]> is result of the `and` logic of <![CDATA[ <input refid="sign">]]> and the `xor` logic of MSB of <![CDATA[ <input refid="QUOTIENT">]]> register and MSB of <![CDATA[ <logic refid="divisor">]]> register.
         </logic>
     </logic_description>
     <implementation>Operation Start:
-When <![CDATA[ <input refid="opn_valid">]]> is high, <![CDATA[ <output refid="res_valid">]]> is low, and <![CDATA[ <input refid="start_cnt">]]> is low, the module saves the inputs dividend and divisor in to 2 8-bit corresponding regisers.
+When opn_valid is high, res_valid is low, and start_cnt is low, the module saves the inputs dividend and divisor in to 2 8-bit corresponding regisers.
 Initializes the 16-bit shift register SR with the absolute value of the original input `dividend` (dividend_abs) shifted left by one bit.
 9-bit NEG_DIVISOR is set to `divisor_extend`, if the sign bit and MSB of divisor is high. Otherwise, sets 9-bit NEG_DIVISOR to two's complement of the `divisor_extend`.
-Sets the 4-bit counter cnt to 1 and <![CDATA[ <input refid="start_cnt">]]> to 1 to begin the division process.
+Sets the 4-bit counter cnt to 1 and start_cnt to 1 to begin the division process.
 
-Division Process(If <![CDATA[ <input refid="start_cnt">]]> is high, the module performs the following steps):
+Division Process(If start_cnt is high, the module performs the following steps):
 If most significant bit of cnt is set (the counter cnt reaches 8), the division is complete:
-cnt and <![CDATA[ <input refid="start_cnt">]]> are cleared. Then, based on SR_final_update method, Updates the shift register SR with the final remainder and quotient.
+cnt and start_cnt are cleared. Then, based on SR_final_update method, Updates the shift register SR with the final remainder and quotient.
 Otherwise, the counter cnt is incremented, and the shift register SR is updated based on the subtraction result `mux_result`:
 Based on `sub_remainer_reg_divisor`, compute the summation of `NEG_DIVISOR` and `REMAINER`.
 Uses a multiplexer to select the appropriate result based on the carry-out.

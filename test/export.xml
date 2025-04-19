@@ -1,99 +1,140 @@
-<module id="div_8bit">
-  <description>Implement a simplified radix-2 divider on 8-bit signed or unsigned integers. and the inputs are two 8-bit operands. The module accepts a dividend and a divisor as inputs and provides a 16-bit result containing both the quotient and the remainder. The design supports both signed and unsigned division operations.</description>
-  <ports>
-    <input id="clk" width_description="">Clock signal used for synchronous operation.</input>
-    <input id="rst" width_description="">The reset signal to initialize or reset the module.</input>
-    <input id="sign" width_description="">1-bit indicates if the operation is signed (1) or unsigned (0).</input>
-    <input id="dividend" width_description="">8-bit input signal representing the dividend for division.</input>
-    <input id="divisor" width_description="">8-bit input signal representing the divisor for division.</input>
-    <input id="opn_valid" width_description="">1-bit indicates that a valid operation request is present.</input>
-    <input id="res_ready" width_description="">1-bit indicates that the 16-bit output result has already been acknowledged.</input>
-    <output id="res_valid" width_description="">1-bit output signal indicating the result is valid and ready. res_valid must be constructed as combinational logic and not in any always block. So `res_valid` must not be declared as register.</output>
-    <output id="result" width_description="">16-bit the output containing the remainder in the upper 8 bits and the quotient in the lower 8 bits.</output>
-  </ports>
-  <logic_description>
-    <description>
+<modules>
+  <module id="asyn_fifo">
+    <description>Implement an asynchronous FIFO, FIFO bit width and depth can be configured(parameter DEPTH = 16, parameter WIDTH = 8). The asynchronous FIFO structure is divided into several parts. The first part is dual-port RAM, which is used for data storage. Instantiate dual-port RAM as a submodule, The RAM ports are input wclk, input wenc, input [$clog2(DEPTH)-1:0] waddr, input [WIDTH-1:0] wdata, input rclk, input renc, input [$clog2(DEPTH)-1:0] raddr, output reg [WIDTH-1:0] rdata. The second part is the data write controller. The third part is the data read controller. The fourth part is the read pointer synchronizer. The read pointer is collected using the two-stage trigger of the write clock and output to the data write controller. The fifth part is the write pointer synchronizer, which uses the two-stage trigger of the read clock to collect the write pointer and output it to the data read controller.
+The method of empty and full judgment is to generate empty and full signals by comparing the Gray code. Use 4-bit Gray code as a read/write pointer for a FIFO with depth 8. The gray code is converted to a four-digit binary number, using the lower three digits of the binary number as the address to access RAM. When the read and write Pointers are equal, the FIFO is null.
+When the write pointer has one more cycle RAM than the read pointer, the highest and second-highest bits of the read and write pointer are opposite, the remaining bits are the same, and the FIFO is full.
+</description>
+    <ports>
+      <input id="wclk" width_description="">Write clock signal used for synchronous write operations.</input>
+      <input id="rclk" width_description="">Read clock signal used for synchronous read operations.</input>
+      <input id="wrstn" width_description="">Write reset signal. Defined as 0 for reset and 1 for reset signal inactive.</input>
+      <input id="rrstn" width_description="">Read reset signal. Defined as 0 for reset and 1 for reset signal inactive.</input>
+      <input id="winc" width_description="">Write increment signal. Used to trigger write operations.</input>
+      <input id="rinc" width_description="">Read increment signal. Used to trigger read operations.</input>
+      <input id="wdata" width_description="">Write data input. The width [WIDTH-1:0] is configurable and represents the data to be written into the FIFO.</input>
+      <output id="wfull" width_description="">Write full signal. Indicates if the FIFO is full and cannot accept further write operations.</output>
+      <output id="rempty" width_description="">Read empty signal. Indicates if the FIFO is empty and cannot provide any data for read operations.</output>
+      <output id="rdata" width_description="">Read data output. The width [WIDTH-1:0] is configurable and represents the data read from the FIFO.</output>
+    </ports>
+    <parameter_description>
+      <parameter id="WIDTH"></parameter>
+      <parameter id="DEPTH"></parameter>
+      <parameter id="ADDR_WIDTH">Internal parameter.</parameter>
+    </parameter_description>
+    <logic_description>
+      <description>
             Notice that below descriptions are along with tags  &lt;logic /&gt;.
             With a  &lt;logic type="combinational_logic" /&gt;, must construct this logic as interal wire declaration. Or this  &lt;logic type="combinational_logic" /&gt; can be declared as a `reg` but only be used in always(*) block.
             With a  &lt;logic type="sequential_logic" /&gt;, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other  &lt;logic type="sequential_logic" /&gt; or  &lt;logic type="combinational_logic" /&gt; states.
             With a  &lt;logic type="sequential_logic_operation" /&gt;, no declaration for this keyword. Just place this operation sequence in below mentioned description.
             With a  &lt;logic type="combinational_logic_operation" /&gt;, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
         </description>
-    <logic id="divisor_extend" width_description="" type="combinational_logic">
-        9-bit combinational logic.  &lt;logic refid="divisor_extend"&gt; is set to concatenation of bit 1 and input  &lt;input refid="divisor"&gt; if the input  &lt;input refid="sign"&gt; and MSB of input  &lt;input refid="divisor"&gt; is high. Otherwise,  &lt;logic refid="divisor_extend"&gt; is set to concatenation of bit 0 and input  &lt;logic refid="divisor"&gt;.
+      <logic id="raddr_bin" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `rclk` or negative edge of `rrstn`. `raddr_bin` size is (`ADDR_WIDTH` + 1) bits. If `rrstn` is deactive, `raddr_bin` is all zero. Otherwise, `raddr_bin` is incremented by 1 if `rempty` is deactive and `rinc` is active.
         </logic>
-    <logic id="NEG_DIVISOR" width_description="" type="sequential_logic">
-        9-bit sequencial logic.
+      <logic id="raddr_gray" width_description="" depth_description="" type="combinational_logic">
+        raddr_gray is XOR operation between `raddr_bin` and shift-left-1 operation of `raddr_bin.`
         </logic>
-    <logic id="all_sub_result" width_description="" type="combinational_logic">
-        10-bit combinational logic.
+      <logic id="rptr" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `rclk` or negative edge of `rrstn`. `rptr` size is (`ADDR_WIDTH` + 1) bits. If `wrstn` is deactive, `rptr` is all zero. Otherwise, `rptr` is `raddr_gray`.
         </logic>
-    <logic id="sub_result" width_description="" type="combinational_logic">
-        9-bit combinational logic.  &lt;logic refid="sub_result"&gt; is the first 9-bit of  &lt;logic refid="all_sub_result"&gt;.
+      <logic id="rptr_buff" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `wclk` or negative edge of `wrstn`. `rptr_buff` size is (`ADDR_WIDTH` + 1) bits. If `wrstn` is deactive, `rptr_buff` is all zero. Otherwise, `rptr_buff` is set to `rptr`.
         </logic>
-    <logic id="sub_remainer_reg_divisor" width_description="" type="combinational_logic_operation">
-        combinational logic operation. 10-bit  &lt;logic refid="all_sub_result"&gt; is set to summation of  &lt;logic refid="REMAINER"&gt; and  &lt;logic refid="NEG_DIVISOR"&gt;.
+      <logic id="rptr_syn" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `wclk` or negative edge of `wrstn`. `rptr_syn` size is (`ADDR_WIDTH` + 1) bits. If `wrstn` is deactive, `rptr_syn` is all zero. Otherwise, `rptr_syn` is set to `rptr_buff`.
         </logic>
-    <logic id="REMAINER" width_description="" type="combinational_logic">
-        8-bit combinational logic. This is a subsection of 8-bit MSB of  &lt;logic refid="SR"&gt;.
+      <logic id="ren" width_description="" depth_description="" type="combinational_logic">
+        Internal read enable logic. `ren` is active if `rinc` is active and `rempty` is deactive.
         </logic>
-    <logic id="SR" width_description="" type="sequential_logic">
-        The 16-bit shift register.
+      <logic id="waddr_bin" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `wclk` or negative edge of `wrstn`. `waddr_bin` size is (`ADDR_WIDTH` + 1) bits. If `wrstn` is deactive, `waddr_bin` is all zero. Otherwise, `waddr_bin` is incremented by 1 if `wfull` is deactive and `winc` is active.
         </logic>
-    <logic id="QUOTIENT" width_description="" type="combinational_logic">
-        8-bit combinational logic. This is a subsection of 8-bit LSB of  &lt;logic refid="SR"&gt;.
+      <logic id="waddr_gray" width_description="" depth_description="" type="combinational_logic">
+        waddr_gray is XOR operation between `waddr_bin` and shift-left-1 operation of `waddr_bin.`
         </logic>
-    <logic id="CO" width_description="" type="combinational_logic">
-        1-bit combinational logic.  &lt;logic refid="CO"&gt; is set to the MSB of  &lt;logic refid="all_sub_result"&gt;.
+      <logic id="wptr" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `wclk` or negative edge of `wrstn`. `wptr` size is (`ADDR_WIDTH` + 1) bits. If `wrstn` is deactive, `wptr` is all zero. Otherwise, `wptr` is `waddr_gray`.
         </logic>
-    <logic id="mux_result" width_description="" type="combinational_logic">
-        9-bit combinational logic. If  &lt;logic refid="CO"&gt; is high,  &lt;logic refid="mux_result"&gt; is set to  &lt;logic refid="sub_result"&gt; else set to  &lt;logic refid="REMAINER"&gt;.
+      <logic id="wfull" width_description="" depth_description="" type="combinational_logic">
+        The wfull output is set to 1 when the `wptr` is equal to the bitwise negation of the 2 most significant bits of the `rptr_syn` concatenated with the remaining bits of the `rptr_syn`.
         </logic>
-    <logic id="quotient_shift" width_description="" type="combinational_logic">
-        7-bit combinational logic.  &lt;logic refid="quotient_shift"&gt; is set to 7 [7:1] bits of  &lt;logic refid="SR"&gt;.
+      <logic id="wptr_buff" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `rclk` or negative edge of `rrstn`. `wptr_buff` size is (`ADDR_WIDTH` + 1) bits. If `rrstn` is deactive, `wptr_buff` is all zero. Otherwise, `wptr_buff` is set to `wptr`.
         </logic>
-    <logic id="SR_final_update" width_description="" type="sequential_logic_operation">
-        First, the 8-bit MSB of  &lt;logic refid="SR"&gt; is set to 8-bit  &lt;logic refid="mux_result"&gt;. Then bit [0:0] of  &lt;logic refid="SR"&gt; is set to  &lt;logic refid="CO"&gt;.
+      <logic id="wptr_syn" width_description="" depth_description="" type="sequential_logic">
+        executes when positive edge of `rclk` or negative edge of `rrstn`. `wptr_syn` size is (`ADDR_WIDTH` + 1) bits. If `rrstn` is deactive, `wptr_syn` is all zero. Otherwise, `wptr_syn` is set to `wptr_buff`.
         </logic>
-    <logic id="SR_shifting" width_description="" type="sequential_logic_operation">
-        Concatenate  &lt;logic refid="SR"&gt; from of first 7-bit of  &lt;logic refid="mux_result"&gt;, 7-bit  &lt;logic refid="quotient_shift"&gt;, 1-bit  &lt;logic refid="CO"&gt;, and 1-bit zero.
+      <logic id="wen" width_description="" depth_description="" type="combinational_logic">
+        Internal write enable logic. `wen` is active if `winc` is active and `wfull` is deactive.
         </logic>
-    <logic id="dividend_abs" width_description="" type="combinational_logic">
-        8-bit combinational logic. If  &lt;input refid="sign"&gt; and the MSB of input  &lt;input refid="dividend"&gt; is high,  &lt;logic refid="dividend_abs"&gt; is set to two's complement of the input  &lt;input refid="dividend"&gt;. Otherwise  &lt;logic refid="dividend_abs"&gt; is set to the original input  &lt;logic refid="dividend"&gt; only.
+      <logic id="rempty" width_description="" depth_description="" type="combinational_logic">
+        `rempty` is active if `rptr` is equaled to wptr_syn`.
         </logic>
-    <logic id="final_remainer" width_description="" type="combinational_logic">
-        8-bit combinational logic.  &lt;logic refid="final_remainer"&gt; is set to two's complement of  &lt;logic refid="REMAINER"&gt; if the  &lt;input refid="sign"&gt; bit and MSB of register  &lt;input refid="dividend"&gt; is high. Otherwise,  &lt;logic refid="final_remainer"&gt; is set to  &lt;logic refid="REMAINER"&gt;.
-        </logic>
-    <logic id="final_quotient" width_description="" type="combinational_logic">
-        8-bit combinational logic.  &lt;logic refid="final_quotient"&gt; is set to two's complement of  &lt;logic refid="QUOTIENT"&gt; if  &lt;logic refid="is_final_quotient_sign"&gt; is high. Otherwise,  &lt;logic refid="final_remainer"&gt; is set to  &lt;logic refid="QUOTIENT"&gt;.
-        </logic>
-    <logic id="is_final_quotient_sign" width_description="" type="combinational_logic">
-        1-bit combinational logic.  &lt;logic refid="is_final_quotient_sign"&gt; is result of the `and` logic of  &lt;input refid="sign"&gt; and the `xor` logic of MSB of  &lt;input refid="QUOTIENT"&gt; register and MSB of  &lt;logic refid="divisor"&gt; register.
-        </logic>
-  </logic_description>
-  <implementation>Operation Start:
-When opn_valid is high, res_valid is low, and start_cnt is low, the module saves the inputs dividend and divisor in to 2 8-bit corresponding regisers.
-Initializes the 16-bit shift register SR with the absolute value of the original input `dividend` (dividend_abs) shifted left by one bit.
-9-bit NEG_DIVISOR is set to `divisor_extend`, if the sign bit and MSB of divisor is high. Otherwise, sets 9-bit NEG_DIVISOR to two's complement of the `divisor_extend`.
-Sets the 4-bit counter cnt to 1 and start_cnt to 1 to begin the division process.
+    </logic_description>
+    <implementation>The module implements an asynchronous FIFO using a dual-port RAM module and additional logic for managing read and write pointers.
+Dual-port RAM:
+The module instantiates a dual-port RAM module,  &lt;module refid="dual_port_RAM"/&gt;, with configurable depth and width.  
+The following logics from the top module `asyn_fifo` are used to instantiates the  &lt;module refid="dual_port_RAM"/&gt;:
+-  &lt;input refid="wclk"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;input refid="wclk"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;input refid="wenc"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;logic refid="wen"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;input refid="waddr"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;logic refid="waddr"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;input refid="wdata"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;input refid="wdata"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;input refid="rclk"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;input refid="rclk"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;input refid="renc"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;logic refid="ren"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;logic refid="raddr"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;input refid="raddr"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
+-  &lt;output refid="rdata"/&gt; of  &lt;module refid="dual_port_RAM"/&gt; is mapped to  &lt;output refid="rdata"/&gt; of  &lt;module refid="asyn_fifo"/&gt;.
 
-Division Process(If start_cnt is high, the module performs the following steps):
-If most significant bit of cnt is set (the counter cnt reaches 8), the division is complete:
-cnt and start_cnt are cleared. Then, based on SR_final_update method, Updates the shift register SR with the final remainder and quotient.
-Otherwise, the counter cnt is incremented, and the shift register SR is updated based on the subtraction result `mux_result`:
-Based on `sub_remainer_reg_divisor`, compute the summation of `NEG_DIVISOR` and `REMAINER`.
-Uses a multiplexer to select the appropriate result based on the carry-out.
-Based on `SR_shifting`, updates SR.
+Write and Read Pointers:
+The module includes logic to manage write and read pointers for asynchronous operation.
+The write and read pointers are represented by binary registers, `waddr_bin` and `raddr_bin`, respectively.
+The `waddr_bin` and `raddr_bin` pointers are incremented based on the write and read increment signals (winc and rinc), respectively.
+The write pointer `waddr_bin` is incremented on the positive edge of the write clock (posedge wclk) and reset to 0 on write reset (~wrstn).
+The read pointer `raddr_bin` is incremented on the positive edge of the read clock (posedge rclk) and reset to 0 on read reset (~rrstn).
+Gray Code Conversion:
+The write and read pointers are converted to Gray code using XOR operations with right-shifted values.
+The converted write and read pointers are stored in registers `wptr` and `rptr`, respectively.
+The Gray code conversion reduces glitches and ensures proper synchronization of the write and read pointers.
+Pointer Buffers:
+The module includes buffer registers (wptr_buff and rptr_buff) to hold the previous values of the write and read pointers.
+The buffer registers are updated on the positive edge of the respective clocks and reset to 0 on the respective resets (~wrstn and ~rrstn).
+The buffer registers are used to synchronize the write and read pointers for determining the full and empty conditions.
+Full `wfull` and Empty `rempty` Signals:
+The module compares the current write and read pointers (wptr and rptr_syn) to determine if the FIFO is full or empty.
+The `rempty` output is set to 1 when the read pointer is equal to the write pointer.
+Input and Output Connections:
+The module connects the input and output signals to the dual-port RAM module based on the control signals and pointer values.
+The `wen` and `ren` signals control the write and read enable signals of the RAM module, respectively.
+The `wdata` input is connected to the write data input (wdata) of the RAM module.
+The `rdata` output is connected to the read data output (rdata) of the RAM module.
 
-Result Validity:
-res_valid is managed based on the reset signal, the counter, and whether the result has been consumed, which is signaled by the input (res_ready).
-`res_valid` should be update directly, without passing middle register value.
-`res_valid` is set to zero if `rst` is high. 
-Otherwise, if `cnt` reaches 8, `res_ready` is set to 1. 
-Otherwise, if `res_valid` and `res_ready` is all high, `res_valid` is set to 0. Otherwise, `res_valid` is set to `res_valid`.
-
-Result operation:
-The output `result` is constructed as combinational logic and is set to concatenation of `final_remainer` and `final_quotient`. Notice that, because of combinational operation, the `result` must not be calculated in any always block.
+Please provide correct `Logic description` fields above to achieve correctness for `asyn_fifo` design in both sequential and combinational logics.
 </implementation>
-  <task>Give me the complete Verilog code.</task>
-</module>
+    <task>Give me the complete Verilog code.</task>
+  </module>
+  <module id="dual_port_RAM">
+    <description>A dual-port RAM module</description>
+    <ports>
+      <input id="wclk" width_description="">Write clock signal used for synchronous write operations.</input>
+      <input id="wenc" width_description="">1-bit Write-enable signal</input>
+      <input id="waddr" width_description="">`$clog2(DEPTH)` bits for Write address</input>
+      <input id="wdata" width_description="">Write data input. The width [WIDTH-1:0] is configurable and represents the data to be written into the FIFO.</input>
+      <input id="rclk" width_description="">Read clock signal used for synchronous read operations.</input>
+      <input id="renc" width_description="">Read-enable signal</input>
+      <input id="raddr" width_description="">`$clog2(DEPTH)` bits for Read address</input>
+      <output id="rdata" width_description="">Read data output. The width [WIDTH-1:0] is configurable and represents the data read from the  &lt;module refid="dual_port_RAM"/&gt;.</output>
+    </ports>
+    <parameter_description>
+      <parameter id="WIDTH"></parameter>
+      <parameter id="DEPTH"></parameter>
+    </parameter_description>
+    <implementation>
+    The RAM module has separate clock inputs for write (wclk) and read (rclk) operations.
+The RAM module has separate address inputs for write (waddr) and read (raddr) operations.
+The RAM module has a write enable input (wenc) and a write data input (wdata).
+The RAM module has a read enable input (renc) and a read data output (rdata).
+The RAM module stores data in a two-dimensional array, RAM_MEM, with a size of DEPTH by WIDTH.
+    </implementation>
+    <task>Give me the complete Verilog code.</task>
+  </module>
+</modules>

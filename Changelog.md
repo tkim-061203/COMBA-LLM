@@ -2,6 +2,8 @@
 
 ## Target
 
+- **Focus on XML-based logic-dedicated prompt**.
+  - **Especially the unspecified logics!!!**
 - [ ] XML-based prompting for all designs.
 - [ ] Analysis Mechanism for Warnings/Errors.
 - ~~Testbench Procedure based on VCD Waveform Analysis. Pyhon program for Binary Waveform Analysis.~~
@@ -9,6 +11,7 @@
 ## Limit
 
 - Cannot perform VCD Waveform Analysis at glance.
+- Cannot perform `Verifier for sequential and combinational verification after Verilog generation`. Should be a essential for next phase!!!.
 
 ## Further
 
@@ -16,6 +19,18 @@
 - Auto ignore `Wno` for `exceptionTitle` if reach limit.
 - Research of partial feedback such as Verilog Code - Compiler.
   - [ ] Framework for auto feedback generator?
+- Verifier for sequential and combinational verification after Verilog generation.
+- [ ] Global debug log for `New addition content for Verilator warning`.
+
+## 3.1.0
+
+- Usage `-Werror-<message> Convert warnings to errors`.
+
+  - MULTIDRIVEN, UNDRIVEN
+
+- In the case `asyn_fifo`, prompt syntax for bitwise concatenation of the `wfull` logic.
+- Remove `Fallback to lastTBSimulationSuccessStatus. (enter any key)`.
+- `Modules` and `instanciation` prompt format.
 
 ## 3.0.0-new
 

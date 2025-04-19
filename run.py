@@ -1,8 +1,8 @@
-import argparse, os, shutil, subprocess, typing, re
+import argparse, os, shutil, typing, glob
 import datetime
 from scripts.langchain_groq_util import generate as llmGenerate
 from scripts.utils import md_code_extract, generateWorkFolderArgument
-from scripts.constants import Commands, ModuleNamePrefix, Template, WarningExtraction
+from scripts.constants import Commands, ModuleNamePrefix, Template
 from scripts.rag import ragCreate
 from scripts.codeAgent import LLMCodeAgent
 
@@ -26,6 +26,9 @@ parser_runWork.add_argument(
 )
 parser_runWork.add_argument(
     "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+)
+parser_runWork.add_argument(
+    "--nodebug", action="store_true", help="No Debug with yes/no input"
 )
 
 parser_makeWork = subparsers.add_parser(
@@ -219,10 +222,15 @@ def runFlow(
     modulePaths: typing.List[str],
     workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
-    desciptionType='txt'
+    desciptionType='txt',
+    nodebug=False
 ):
+    moduleGlobPaths = []
+    for modulePath in modulePaths:
+        moduleGlobPaths += glob.glob(modulePath)
+
     # makeverified(modules)
-    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
+    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in moduleGlobPaths]
 
     for moduleNormPath in moduleNormPaths:
         moduleName = os.path.basename(moduleNormPath)
@@ -239,6 +247,7 @@ def runFlow(
             model_provider="openai",
             temperature=0,
             descriptionType=desciptionType
+            customInputDirective={}
         )
         llmCodeAgent()
 

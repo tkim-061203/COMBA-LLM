@@ -7,30 +7,28 @@ module div_8bit(
     input opn_valid,
     input res_ready,
     output reg res_valid,
-    output reg [15:0] result
+    output [15:0] result
 );
 
     reg [7:0] dividend_reg, divisor_reg;
-    reg [8:0] NEG_DIVISOR;
     reg [15:0] SR;
     reg [3:0] cnt;
     reg start_cnt;
-
     wire [8:0] divisor_extend;
-    wire [9:0] all_sub_result;
+    reg [8:0] NEG_DIVISOR;
+    reg [9:0] all_sub_result;
     wire [8:0] sub_result;
     wire [8:0] REMAINER;
     wire [8:0] QUOTIENT;
     wire CO;
     wire [8:0] mux_result;
-    wire [7:0] quotient_shift;
+    wire [6:0] quotient_shift;
     wire [8:0] dividend_abs;
     wire [8:0] final_remainer;
     wire [8:0] final_quotient;
     wire is_final_quotient_sign;
 
     assign divisor_extend = {sign && divisor[7], divisor};
-    assign all_sub_result = REMAINER + NEG_DIVISOR;
     assign sub_result = all_sub_result[8:0];
     assign REMAINER = SR[15:8];
     assign QUOTIENT = SR[7:0];
@@ -40,7 +38,7 @@ module div_8bit(
     assign dividend_abs = (sign && dividend[7]) ? ~dividend + 1 : dividend;
     assign final_remainer = (sign && dividend[7]) ? ~REMAINER + 1 : REMAINER;
     assign final_quotient = (is_final_quotient_sign) ? ~QUOTIENT + 1 : QUOTIENT;
-    assign is_final_quotient_sign = sign && (QUOTIENT[7] ^ divisor[7]);
+    assign is_final_quotient_sign = sign && (dividend[7] ^ divisor[7]);
     assign result = {final_remainer, final_quotient};
 
     always @(posedge clk or posedge rst) begin
@@ -51,7 +49,6 @@ module div_8bit(
             cnt <= 0;
             start_cnt <= 0;
             res_valid <= 0;
-            NEG_DIVISOR <= 0; // Initialize NEG_DIVISOR
         end else if (opn_valid && !start_cnt) begin
             dividend_reg <= dividend;
             divisor_reg <= divisor;
@@ -59,19 +56,28 @@ module div_8bit(
             NEG_DIVISOR <= (sign && divisor[7]) ? divisor_extend : ~divisor_extend + 1;
             cnt <= 1;
             start_cnt <= 1;
-            res_valid <= 0;
         end else if (start_cnt) begin
             if (cnt == 8) begin
-                start_cnt <= 0;
-                res_valid <= 1;
                 cnt <= 0;
+                start_cnt <= 0;
             end else begin
                 cnt <= cnt + 1;
-                SR <= {mux_result[7:0], quotient_shift, CO, 1'b0};
+                all_sub_result <= NEG_DIVISOR + REMAINER; // Drive all_sub_result
+                SR <= {mux_result, quotient_shift, CO, 1'b0};
             end
         end
-        if (res_ready && res_valid) begin
-            res_valid <= 0;
+    end
+
+    always @(*) begin
+        if (rst) begin
+            res_valid = 0;
+        end else if (cnt == 8) begin
+            res_valid = 1;
+        end else if (res_valid && res_ready) begin
+            res_valid = 0;
+        end else begin
+            res_valid = res_valid;
         end
     end
+
 endmodule
