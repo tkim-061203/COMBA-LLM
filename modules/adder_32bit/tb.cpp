@@ -13,9 +13,9 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#define myexit(condition, content)    \
+    {                                 \
+        assert(condition && content); \
     }
 
 vluint64_t sim_time = 0;
@@ -70,9 +70,14 @@ public:
         /* TODO BEGIN 3 */
         if (!((tx->S | (tx->C32 << 32)) == (in->A + in->B)))
         {
+            uint64_t sum_and_carry = in->A + in->B;
+            uint32_t S = sum_and_carry;
+            uint8_t C32 = sum_and_carry >> 32;
+
             printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
             printf("\r\n# TODO 3 INPUT TRACE: in->A = 0x%x, in->B = 0x%x", in->A, in->B);
             printf("\r\n# TODO 3 OUTPUT TRACE: tx->C32 = 0x%x, tx->S = 0x%x", tx->C32, tx->S);
+            printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: C32 = 0x%x, S = 0x%x", C32, S);
 
             printf("\r\n");
             fflush(stdout);

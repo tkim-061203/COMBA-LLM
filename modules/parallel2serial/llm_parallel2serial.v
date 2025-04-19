@@ -13,20 +13,27 @@ module parallel2serial(
         if (!rst_n) begin
             cnt <= 2'b00;
             valid_out <= 0;
-            data <= 4'b0000;
+            dout <= 0;
+            data <= 0;
         end else begin
-            if (cnt == 2'b11) begin
+            if (cnt == 2'b00) begin
                 data <= d;
-                cnt <= 2'b00;
+                cnt <= 2'b01;
                 valid_out <= 1;
-            end else begin
+            end else if (cnt < 2'b11) begin
+                dout <= data[3]; // Output the MSB
+                data <= {data[2:0], 1'b0}; // Shift left and fill LSB with 0
                 cnt <= cnt + 1;
                 valid_out <= 0;
-                data <= {data[2:0], data[3]}; // Shift left
+            end else if (cnt == 2'b11) begin
+                dout <= data[3]; // Output the last bit
+                data <= {data[2:0], 1'b0}; // Shift left
+                cnt <= cnt + 1;
+                valid_out <= 0;
+            end else begin
+                valid_out <= 0; // Ensure valid_out is 0 after the last bit
             end
         end
     end
-
-    assign dout = data[3]; // MSB of data
 
 endmodule

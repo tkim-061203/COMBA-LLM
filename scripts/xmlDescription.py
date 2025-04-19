@@ -1,5 +1,5 @@
 # Genterated automatically by /run.ipynb
-from pydantic_xml import BaseXmlModel, attr, element
+from pydantic_xml import BaseXmlModel, attr, element, RootXmlModel
 from pydantic import Field
 from typing import Optional, Union, List, Literal
 
@@ -20,6 +20,7 @@ class ParameterDescription(BaseXmlModel, tag="parameter_description"):
 class PartialLogicDescription(IDModel):
     description: Optional[str] = None
     width_description: Optional[str] = attr(default=None)
+    depth_description: Optional[str] = attr(default=None)
     type: Literal["combinational_logic", "combinational_logic_operation", "sequential_logic", "sequential_logic_operation"] = attr()
 
 class LogicDescription(BaseXmlModel, tag="logic_description", search_mode='unordered'):
@@ -33,3 +34,5 @@ class Module(IDModel, tag='module'):
     logic_description: Optional[LogicDescription] = element(default=None)
     implementation: str = element()
     task: str = element(default="Give me the complete Verilog code.")
+class Modules(RootXmlModel, tag='modules'):
+    root: List[Module]

@@ -1,44 +1,44 @@
-module multi_pipe_4bit(
-    input clk,
-    input rst_n,
-    input [3:0] mul_a,
-    input [3:0] mul_b,
-    output reg [7:0] mul_out
+module multi_pipe_4bit #(parameter size = 4) (
+    input wire clk,
+    input wire rst_n,
+    input wire [size-1:0] mul_a,
+    input wire [size-1:0] mul_b,
+    output reg [2*size-1:0] mul_out
 );
 
-    parameter size = 4;
-    reg [7:0] partial_products[size-1:0];
-    reg [7:0] sum_reg[1:0]; // Only two registers needed for summing
-    reg [7:0] final_sum;
-
+    reg [2*size-1:0] partial_products [0:size-1];
+    reg [2*size-1:0] sum_reg [0:size/2-1];
     integer i;
 
     always @(*) begin
         // Generate partial products
         for (i = 0; i < size; i = i + 1) begin
             if (mul_b[i])
-                partial_products[i] = mul_a << i;
+                partial_products[i] = mul_a << i; // Correctly shift mul_a without zero extension
             else
-                partial_products[i] = 8'd0;
+                partial_products[i] = 'd0;
         end
     end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // Reset all registers
-            sum_reg[0] <= 8'd0;
-            sum_reg[1] <= 8'd0;
-            final_sum <= 8'd0;
-            mul_out <= 8'd0;
+            // Reset condition
+            for (i = 0; i < size/2; i = i + 1) begin
+                sum_reg[i] <= 'd0;
+            end
+            mul_out <= 'd0;
         end else begin
-            // Add partial products to sum registers
-            sum_reg[0] <= partial_products[0] + partial_products[1];
-            sum_reg[1] <= partial_products[2] + partial_products[3];
-            // Calculate final sum
-            final_sum <= sum_reg[0] + sum_reg[1];
-            // Update output after one clock cycle
-            mul_out <= final_sum;
+            // Add partial products
+            for (i = 0; i < size/2; i = i + 1) begin
+                sum_reg[i] <= partial_products[2*i] + partial_products[2*i + 1];
+            end
+            // Calculate final product
+            mul_out <= 'd0;
+            for (i = 0; i < size/2; i = i + 1) begin
+                mul_out <= mul_out + sum_reg[i];
+            end
+            // Ensure mul_out is updated after one clock cycle
+            mul_out <= sum_reg[0] + sum_reg[1]; // Directly assign the final product
         end
     end
-
 endmodule

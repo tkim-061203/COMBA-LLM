@@ -22,8 +22,8 @@ from langchain_core.runnables.config import RunnableConfig
 import datetime
 from operator import add
 from dotenv import load_dotenv
-from .xmlDescription import Module
-# from pydantic import BaseModel, Field
+from .xmlDescription import Module, Modules
+from tqdm import tqdm
 
 
 class CodeOutput(TypedDict):
@@ -45,6 +45,7 @@ defaultCodeFixerTemplate = ChatPromptTemplate(
             """Please act as a professional verilog code fixer.
 You are provided a Verilog Code with exceptions, such as Error or Warning from  A Verilog Compiler, called Verilator.
 You will fix Verilog code based on the exception content.
+But make sure that your fixing method must not violate any description in the <module /> tag content.
 Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
 
 For example:
@@ -154,6 +155,8 @@ class LLMCodeAgent:
         workFolderName: str = Template.TEMPORARYLLMWORKFOLDERNAME.value,
         model_provider: Literal['gpt-4o-mini-2024-07-18', "groq"] = "groq",
         descriptionType: Literal['txt', 'xml'] = 'txt',
+        customInputDirective: dict = {
+        },
         **kwargs,
     ):
 
@@ -234,6 +237,9 @@ class LLMCodeAgent:
         #
         #
         self._descriptionType = descriptionType
+
+        #
+        self._customInputDirective = customInputDirective
 
     @property
     def config(self):
@@ -355,13 +361,14 @@ class LLMCodeAgent:
                 } | additionRetState)
             else:
                 #
+                
                 if (firstException["exceptionTitle"] not in self._verilator_warns) and (
                  firstException["exceptionTitle"] != None):
+                    with open('reports/log/log.txt', 'a') as file:
+                        print(f'Module: {self._moduleName} - New addition content for Verilator warning "{firstException['exceptionTitle']}"', firstException, sep='\n', file=file)
                     print("firstException", firstException)
                     if (
-                        input(
-                            f'New addition content for Verilator warning "{firstException['exceptionTitle']}"? (y/n): '
-                        )
+                        self.customInput(f'New addition content for Verilator warning "{firstException['exceptionTitle']}"?', 'syntax_compile')
                         == "y"
                     ):
                         self._verilator_warns = readFileContent("rag/verilator_warns.json")
@@ -432,10 +439,10 @@ Here is the related in-line content with the {exceptionType}:
         
         syntaxLimitReach = state['syntaxLimitReach'] if 'syntaxLimitReach' in state else None
         tbLimitReach = state['tbLimitReach'] if 'tbLimitReach' in state else None
-
+        
         if syntaxLimitReach == None and tbLimitReach == None:
             syntax_route_compile_yn = (
-                "n" if self.is_verified_flow else input("Syntax Route compile (y/n): ")
+                "n" if self.is_verified_flow else self.customInput("Syntax Route compile", 'syntax_compile_route')
             )
 
             if (state['compileStatusSuccess']) and syntax_route_compile_yn == "y":
@@ -508,13 +515,13 @@ Here is the related in-line content with the {exceptionType}:
 
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.
-The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because "{failureContent}".
+The incorrect failure is raised between /* TODO BEGIN {todoNum} */ and /* TODO END {todoNum} */ of the testbench code. This failure is because \"{failureContent}\".
 
 The trace values of the inputs are: {inputTrace}
 The trace values of the outputs are: {outputTrace}
 The trace values of the expected outputs must be: {refOutputTrace}
 
-Find out related signals mismatchs with the expected outputs. If mismatched and related signals is described in the description <module refid="{moduleName}"/>, fix the mismatchs based on the description <module refid="{moduleName}"/>.
+Find out related signals mismatchs with the expected outputs. If mismatched and related signals is described in the description <module refid=\"{moduleName}\"/>, fix the mismatchs based on the description <module refid=\"{moduleName}\"/>.
 """.format(
             **(tb_failed | {"moduleName": self._moduleName})
         )
@@ -569,7 +576,6 @@ Here are the content of the testbench code of the Verilog module:
             }
         elif tbStatusSuccess == False and state['errorOnlyCompilation'] == False:
             additionRetState |= state['lastTBSimulationSuccessStatus'][-1]
-            input("Fallback to lastTBSimulationSuccessStatus. (enter any key)")
         else:
             print("TB Simulation raised unknown error!")
             interrupt("TB Simulation raised unknown error!")
@@ -581,9 +587,10 @@ Here are the content of the testbench code of the Verilog module:
 
         tbLimitReach = state['tbLimitReach'] if 'tbLimitReach' in state else None
         syntaxLimitReach = state['syntaxLimitReach'] if 'syntaxLimitReach' in state else None
+        
         if tbLimitReach == None and syntaxLimitReach == None:
             tb_route_compile_yn = (
-                "n" if self.is_verified_flow else input("TB Route compile (y/n): ")
+                "n" if self.is_verified_flow else self.customInput("TB Route compile", 'tb_simulation_route')
             )
 
             if ((not state['tbStatusSuccess']) or (state['exception'] != None)) and tb_route_compile_yn == "y":
@@ -704,9 +711,9 @@ Here are the content of the testbench code of the Verilog module:
         return True
 
     def chatbot_code_generator(self, state: State):
-
+        
         generate_new_code = (
-            "n" if self.is_verified_flow else input("Generate new code? (y/n): ")
+            "n" if self.is_verified_flow else self.customInput("Generate new code?", "chatbot_code_generator")
         )
         if generate_new_code == "n":
             curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
@@ -756,6 +763,9 @@ Here are the content of the testbench code of the Verilog module:
             "generated_code": invokeResult,
         }
     def checkXMLDescription(self, description:str):
+
+        #
+        # Module try
         try:
             self._xmlmodule = Module.from_xml(description)
             valid = True
@@ -764,14 +774,54 @@ Here are the content of the testbench code of the Verilog module:
             valid = False
             formattedXMLDoc = None
 
+        #
+        # Modules try
+        if valid == False and formattedXMLDoc == None:
+            try:
+                self._xmlmodule = Modules.from_xml(description)
+                valid = True
+                formattedXMLDoc:str = self._xmlmodule.to_xml(pretty_print=True).decode('utf-8')
+            except:
+                valid = False
+                formattedXMLDoc = None
+
         return (valid, formattedXMLDoc)
     def stream_graph_updates(self, user_input: State):
         return self._graph.invoke(user_input,
             self.config,
         )
+    def customInput(self, s_in, key):
+        #
+        # initial
+        if key not in self._customInputDirective:
+            self._customInputDirective[key] = {
+                'yall': False,
+                'nall': False
+            }
 
+        #
+        # yes all
+        if self._customInputDirective[key]['yall']:
+            return 'y'
+        elif self._customInputDirective[key]['nall']:
+            return 'n'
+        
+        while True:
+            userInput = input(s_in + " (y/n/ya/na): ")
+            if userInput == 'y' or userInput == 'Y' or \
+                userInput == 'n' or userInput == 'n' or \
+                userInput == 'ya' or userInput == 'YA' or \
+                userInput == 'na' or userInput == 'NA':
+                if  userInput == 'ya' or userInput == 'YA':
+                    self._customInputDirective[key]['yall'] = True
+                elif userInput == 'na' or userInput == 'NA':
+                    self._customInputDirective[key]['nall'] = True
+                break
+            print("Wrong choice!", end=" ") 
+
+        return userInput[0]
     def __next__(self):
-        confirm = input("##### Trial: " + str(self._iteration_time) + ". Next? (y/n) ")
+        confirm = self.customInput("##### Trial: " + str(self._iteration_time) + ". Next?", "__next__")
         if (confirm == "n" or confirm == "N") or (
             self._iteration_time > self._iteration_time_limit
         ):
@@ -836,6 +886,9 @@ Here are the content of the testbench code of the Verilog module:
         self._iteration_time_limit = 4 if not self.is_verified_flow else 1
 
         self.status = "error"
+        self._tqdm = {
+            "__call__": tqdm(total=(self._iteration_time_limit + 1), desc='Trial')
+        }
         return self
 
     def __call__(self):
@@ -851,6 +904,7 @@ Here are the content of the testbench code of the Verilog module:
         }
 
         for iter_report, exception, tb_failed in myiter:
+            self._tqdm['__call__'].update(1)
             json_dumps_report["exception_trial"].append(exception)
             json_dumps_report["tb_failed_trial"].append(tb_failed)
             json_dumps_report["state_trial"].append(iter_report)

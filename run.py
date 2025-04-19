@@ -1,10 +1,14 @@
-import argparse, os, shutil, subprocess, typing, re
+from dotenv import load_dotenv
+load_dotenv()
+
+import argparse, os, shutil, typing, glob
 import datetime
 from scripts.langchain_groq_util import generate as llmGenerate
 from scripts.utils import md_code_extract, generateWorkFolderArgument
-from scripts.constants import Commands, ModuleNamePrefix, Template, WarningExtraction
+from scripts.constants import Commands, ModuleNamePrefix, Template
 from scripts.rag import ragCreate
 from scripts.codeAgent import LLMCodeAgent
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(
     prog="LLM Prompt Template",
@@ -26,6 +30,9 @@ parser_runWork.add_argument(
 )
 parser_runWork.add_argument(
     "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+)
+parser_runWork.add_argument(
+    "--nodebug", action="store_true", help="No Debug with yes/no input"
 )
 
 parser_makeWork = subparsers.add_parser(
@@ -219,15 +226,51 @@ def runFlow(
     modulePaths: typing.List[str],
     workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.VERIFIED.value,
-    desciptionType='txt'
+    desciptionType='txt',
+    nodebug=False,
+    llm_model="gpt-4o-mini-2024-07-18",
 ):
-    # makeverified(modules)
-    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
+    moduleGlobPaths = []
+    for modulePath in modulePaths:
+        moduleGlobPaths += glob.glob(modulePath)
+
+    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in moduleGlobPaths]
+    
+    defaultInputDirYAll = {
+            'yall': True,
+            'nall': False
+        }
+    customInputDirective = {
+        'syntax_compile': {
+            'yall': False,
+            'nall': True
+        },
+        'syntax_compile_route': defaultInputDirYAll,
+        'tb_simulation_route': defaultInputDirYAll,
+        'chatbot_code_generator': defaultInputDirYAll,
+        "__next__": defaultInputDirYAll
+    } if nodebug else {}
+
+    moduletqdm = tqdm(total=len(moduleGlobPaths), desc='Module')
+
+    #
+    # log file
+    # create file if not exist
+    if not os.path.isfile('reports/log/log.txt'):
+        open('reports/log/log.txt', 'w+').close()
+    # clear file
+    with open('reports/log/log.txt', 'w+') as file:
+        file.write('')
 
     for moduleNormPath in moduleNormPaths:
+
+        moduletqdm.update(1)
         moduleName = os.path.basename(moduleNormPath)
-        # moduleNameWorkPath = os.path.join(workFolderName, moduleName)
-        # if not os.path.isdir(moduleNameWorkPath):
+
+        #
+        with open('reports/log/log.txt', 'a') as file:
+            print(f"### Log for module \"{moduleName}\"", sep='\n', file=file)
+        
         makeWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
 
         #
@@ -235,19 +278,28 @@ def runFlow(
         llmCodeAgent = LLMCodeAgent(
             modulePath=moduleNormPath,
             workFolderName=workFolderName,
-            llm_model="gpt-4o-mini-2024-07-18",
+            llm_model=llm_model,
             model_provider="openai",
             temperature=0,
-            descriptionType=desciptionType
+            descriptionType=desciptionType,
+            customInputDirective=customInputDirective
         )
         llmCodeAgent()
-
+    
+    #
+    # history log
+    # mkdir if not exist
+    if not os.path.isdir('reports/log/.history'):
+        os.mkdir('reports/log/.history')
+    
+    history_tag = datetime.datetime.now().isoformat()
+    shutil.copyfile('reports/log/log.txt', f'reports/log/.history/log_{llm_model}_{history_tag}.txt')
 
 match args.command:
     case Commands.CREATEMODULE.value:
         createmodule()
     case Commands.RUNWORK.value:
-        runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype,)))
+        runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype, args.nodebug)))
     case Commands.MAKEWORK.value:
         makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
     case Commands.GENERATE.value:

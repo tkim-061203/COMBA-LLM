@@ -7,32 +7,30 @@ module accu(
     output reg [9:0] data_out
 );
 
-    reg [7:0] data_buffer [0:3]; // Buffer to hold 4 input data
-    reg [1:0] count; // Counter for number of valid inputs
+    reg [9:0] accumulator;
+    reg [2:0] count;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            count <= 0;
-            valid_out <= 0;
-            data_out <= 0;
+            accumulator <= 10'd0;
+            count <= 3'd0;
+            valid_out <= 1'b0;
+            data_out <= 10'd0;
         end else begin
             if (valid_in) begin
-                if (count < 4) begin
-                    data_buffer[count] <= data_in; // Store input data
+                if (count < 3'd4) begin
+                    accumulator <= accumulator + {2'b00, data_in}; // Extend data_in to 10 bits
                     count <= count + 1;
+                    valid_out <= 1'b0;
                 end
-                if (count == 3) begin
-                    // Accumulate the 4 data inputs
-                    data_out <= data_buffer[0] + data_buffer[1] + data_buffer[2] + data_buffer[3];
-                    valid_out <= 1; // Set valid_out for one cycle
-                    count <= 0; // Reset count for next accumulation
-                end else begin
-                    valid_out <= 0; // valid_out is 0 until 4 inputs are received
+                if (count == 3'd3) begin
+                    data_out <= accumulator + {2'b00, data_in}; // Add the last input
+                    valid_out <= 1'b1;
+                    // Reset for next accumulation
+                    accumulator <= 10'd0;
+                    count <= 3'd0;
                 end
-            end else begin
-                valid_out <= 0; // valid_out is 0 if valid_in is not asserted
             end
         end
     end
-
 endmodule

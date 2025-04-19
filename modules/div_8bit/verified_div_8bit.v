@@ -38,7 +38,7 @@ module div_8bit(
 
     reg [3:0] cnt;
     reg start_cnt;
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if(rst) begin
             SR <= 0;
             dividend_save <= 0;
