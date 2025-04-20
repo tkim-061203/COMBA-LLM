@@ -412,7 +412,7 @@ Here is the related in-line content with the {exceptionType}:
 {logContent}""".format(
                     **(firstException)
                 )
-
+                prompt += "\n You should fix this exception without violating any description of the <module refid=\"{moduleName}\"/>, especially when changing a signal from reg to wire, or wire to reg".format(moduleName=self._moduleName)
                 print("compile", firstException)
                 retState |= {
                     "exception": firstException,

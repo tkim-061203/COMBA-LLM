@@ -29,6 +29,7 @@
 - `glob` approach for command `run`.
 - `tqdm` for command `run`.
 - Log file for new Addition content.
+- Latex table export
 
 ## 3.1.0
 

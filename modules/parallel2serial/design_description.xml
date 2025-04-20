@@ -16,10 +16,10 @@
             With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
         </description>
         <logic type="combinational_logic" id="dout">
-        MSB of `data` register.
+        1-bit combinational logic. <![CDATA[ <logic refid="dout" />]]> is the MSB of `data` register.
         </logic>
     </logic_description>
-    <implementation>The most significant bit of the parallel input is assigned to the serial output <![CDATA[ <logic refid="dout" />]]>. On each clock cycle, if the counter (cnt) is 3, indicating the last bit of the parallel input, the module updates the data register (data) with the parallel input (d), resets the counter (cnt) to 0, and sets the valid signal (valid) to 1.
+    <implementation>On each clock cycle, if the counter (cnt) is 3, indicating the last bit of the parallel input, the module updates the data register (data) with the parallel input (d), resets the counter (cnt) to 0, and sets the valid signal (valid) to 1.
 Otherwise, the module increments the counter (cnt) by 1, sets the valid signal (valid) to 0, and shifts the data register (data) one bit to the left, with the most significant bit shifted to the least significant bit.
 Counter Register: If the reset signal (rst_n) is high, the register (cnt) is incremented by 1.
 </implementation>
