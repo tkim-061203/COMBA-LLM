@@ -29,7 +29,8 @@
 - `glob` approach for command `run`.
 - `tqdm` for command `run`.
 - Log file for new Addition content.
-- Latex table export
+- Latex table export:
+  - Full table: `The Syntax and Functionality Correctness Verification for Different LLMs`.
 
 ## 3.1.0
 
