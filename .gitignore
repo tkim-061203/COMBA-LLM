@@ -8,3 +8,4 @@
 volumes
 core.*
 waveform.vcd
+reports/log/log.txt

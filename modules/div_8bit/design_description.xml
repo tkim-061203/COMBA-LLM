@@ -16,8 +16,8 @@
             Notice that below descriptions are along with tags <![CDATA[ <logic />]]>. These tags <![CDATA[ <logic />]]> could be described more detail in the below description in the <![CDATA[ <implementation />]]> tag.
             With a <![CDATA[ <logic type="combinational_logic" />]]>, must construct this logic as interal wire declaration. Or this <![CDATA[ <logic type="combinational_logic" />]]> can be declared as a `reg` but only be used in always(*) block.
             With a <![CDATA[ <logic type="sequential_logic" />]]>, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other <![CDATA[ <logic type="sequential_logic" />]]> or <![CDATA[ <logic type="combinational_logic" />]]> states.
-            With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, no declaration for this keyword. Just place this operation sequence in below mentioned description.
-            With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
+            With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, place directly this operation sequence in below mentioned description.
+            With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, based on the keyword `assign` to construct description of this combinational logic operation.
         </description>
         <logic type="combinational_logic" id="divisor_extend">
         9-bit combinational logic. <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 1 and input <![CDATA[ <input refid="divisor">]]> if the input <![CDATA[ <input refid="sign">]]> and MSB of input <![CDATA[ <input refid="divisor">]]> is high. Otherwise, <![CDATA[ <logic refid="divisor_extend">]]> is set to concatenation of bit 0 and input <![CDATA[ <logic refid="divisor">]]>.
@@ -26,13 +26,13 @@
         9-bit sequencial logic. Follow the below description in the <![CDATA[ <implementation />]]> tag for more detail in this sequential logic.
         </logic>
         <logic type="combinational_logic" id="all_sub_result">
-        10-bit combinational logic.
+        10-bit combinational logic. This is combinational, not sequential_logic.
         </logic>
         <logic type="combinational_logic" id="sub_result">
         9-bit combinational logic. <![CDATA[ <logic refid="sub_result">]]> is the first 9-bit of <![CDATA[ <logic refid="all_sub_result">]]>.
         </logic>
         <logic type="combinational_logic_operation" id="sub_remainer_reg_divisor">
-        combinational logic operation. 10-bit <![CDATA[ <logic refid="all_sub_result">]]> is set to summation of <![CDATA[ <logic refid="REMAINER">]]> and <![CDATA[ <logic refid="NEG_DIVISOR">]]>.
+        10-bit combinational <![CDATA[ <logic refid="all_sub_result">]]> is set to summation of <![CDATA[ <logic refid="REMAINER">]]> and <![CDATA[ <logic refid="NEG_DIVISOR">]]>.
         </logic>
         <logic type="combinational_logic" id="REMAINER">
         8-bit combinational logic. This is a subsection of 8-bit MSB of <![CDATA[ <logic refid="SR">]]>.
@@ -73,6 +73,15 @@
         <logic type="sequential_logic" id="start_cnt">
         1-bit sequential logic. When <![CDATA[ <input refid="rst">]]> is high, <![CDATA[ <input refid="start_cnt">]]> is reset to 0. Otherwise, follow the below description in the <![CDATA[ <implementation />]]> tag.
         </logic>
+        <logic type="sequential_logic" id="res_valid">
+        1-bit sequential logic.
+        Must construc <![CDATA[ <logic refid="res_valid">]]> in a separate always block executing when positive edge of <![CDATA[ <input refid="clk">]]> and positive edge of <![CDATA[ <input refid="rst">]]>.
+        <![CDATA[ <logic refid="res_valid">]]> is managed based on the <![CDATA[ <input refid="rst">]]> signal, the cnt, and whether the result has been consumed, which is signaled by the input <![CDATA[ <input refid="res_ready">]]>.
+        <![CDATA[ <logic refid="res_valid">]]> should be update directly, without passing middle register value.
+        <![CDATA[ <logic refid="res_valid">]]> is set to zero if <![CDATA[ <input refid="rst">]]> is high. 
+        Otherwise, if `cnt` reaches 8, <![CDATA[ <logic refid="res_valid">]]> is set to 1. 
+        Otherwise, if <![CDATA[ <logic refid="res_valid">]]> and <![CDATA[ <input refid="res_ready">]]> is all high, <![CDATA[ <logic refid="res_valid">]]> is set to 0. Otherwise, <![CDATA[ <logic refid="res_valid">]]> is set to <![CDATA[ <logic refid="res_valid">]]>.
+        </logic>
     </logic_description>
     <implementation>Operation Start:
 When <![CDATA[ <input refid="opn_valid">]]> is high, <![CDATA[ <output refid="res_valid">]]> is low, and <![CDATA[ <input refid="start_cnt">]]> is low, the module saves the inputs dividend and divisor in to 2 8-bit corresponding regisers.
@@ -87,13 +96,6 @@ Otherwise, the counter cnt is incremented, and the shift register SR is updated 
 Based on `sub_remainer_reg_divisor`, compute the summation of `NEG_DIVISOR` and `REMAINER`.
 Uses a multiplexer to select the appropriate result based on the carry-out.
 Based on `SR_shifting`, updates SR.
-
-Result Validity:
-res_valid is managed based on the reset signal, the counter, and whether the result has been consumed, which is signaled by the input (res_ready).
-`res_valid` should be update directly, without passing middle register value.
-`res_valid` is set to zero if `rst` is high. 
-Otherwise, if `cnt` reaches 8, `res_ready` is set to 1. 
-Otherwise, if `res_valid` and `res_ready` is all high, `res_valid` is set to 0. Otherwise, `res_valid` is set to `res_valid`.
 
 Result operation:
 The output `result` is constructed as combinational logic and is set to concatenation of `final_remainer` and `final_quotient`. Notice that, because of combinational operation, the `result` must not be calculated in any always block.

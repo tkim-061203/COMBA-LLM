@@ -14,9 +14,8 @@
             Notice that below descriptions are along with tags <![CDATA[ <logic />]]>. These tags <![CDATA[ <logic />]]> could be described more detail in the below description in the <![CDATA[ <implementation />]]> tag.
             With a <![CDATA[ <logic type="combinational_logic" />]]>, must construct this logic as interal wire declaration. Or this <![CDATA[ <logic type="combinational_logic" />]]> can be declared as a `reg` but only be used in always(*) block.
             With a <![CDATA[ <logic type="sequential_logic" />]]>, must construct this logic as `reg` declaration. Must update this logic, in an always block, based on other <![CDATA[ <logic type="sequential_logic" />]]> or <![CDATA[ <logic type="combinational_logic" />]]> states.
-            With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, no declaration for this keyword. Just place this operation sequence in below mentioned description.
-            With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, no declaration for this keyword. Just based on the keyword `assign` to construct description of this combinational logic operation.
-            With a <![CDATA[ <logic id="temp" />]]> tag with width_description and depth_description attributes declaration, such as <![CDATA[ <logic id="temp" width_description="[a:b]" depth_description="[c:d]"/>]]>, it must be declared as `wire [a:b] temp [c:d]` if its type is a `combinational_logic`. Otherwise, the logic must be declared as `reg [a:b] temp [c:d]` if its type is a `sequential_logic` or a `combinational_logic` driven in a `alway @(*)` block.
+            With a <![CDATA[ <logic type="sequential_logic_operation" />]]>, place directly this operation sequence in below mentioned description.
+            With a <![CDATA[ <logic type="combinational_logic_operation" />]]>, based on the keyword `assign` to construct description of this combinational logic operation.
         </description>
         <logic type="sequential_logic" id="mul_a_reg">
         8-bit sequential logic.
