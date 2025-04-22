@@ -1,16 +1,18 @@
-module RAM #(parameter WIDTH = 8, parameter DEPTH = 256) (
+module RAM(
     input clk,
     input rst_n,
     input write_en,
-    input [$clog2(DEPTH)-1:0] write_addr,
-    input [WIDTH-1:0] write_data,
+    input [2:0] write_addr,
+    input [5:0] write_data,
     input read_en,
-    input [$clog2(DEPTH)-1:0] read_addr,
-    output reg [WIDTH-1:0] read_data
+    input [2:0] read_addr,
+    output reg [5:0] read_data
 );
 
-    // Internal RAM array
-    reg [WIDTH-1:0] internal_RAM [0:DEPTH-1];
+    parameter WIDTH = 6;
+    parameter DEPTH = 8;
+
+    reg [WIDTH-1:0] ram_array [0:DEPTH-1]; // Changed RAM to ram_array to avoid naming conflict
 
     // Write operation
     always @(posedge clk or negedge rst_n) begin
@@ -18,23 +20,23 @@ module RAM #(parameter WIDTH = 8, parameter DEPTH = 256) (
             // Reset all memory locations to 0
             integer i;
             for (i = 0; i < DEPTH; i = i + 1) begin
-                internal_RAM[i] <= {WIDTH{1'b0}};
+                ram_array[i] <= 6'b000000;
             end
         end else if (write_en) begin
-            // Write data to the specified address
-            internal_RAM[write_addr] <= write_data;
+            // Write data to RAM at specified address
+            ram_array[write_addr] <= write_data;
         end
     end
 
     // Read operation
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            read_data <= {WIDTH{1'b0}}; // Clear read_data on reset
+            read_data <= 6'b000000;
         end else if (read_en) begin
-            // Read data from the specified address
-            read_data <= internal_RAM[read_addr];
+            // Read data from RAM at specified address
+            read_data <= ram_array[read_addr];
         end else begin
-            read_data <= {WIDTH{1'b0}}; // Clear read_data if not reading
+            read_data <= 6'b000000;
         end
     end
 

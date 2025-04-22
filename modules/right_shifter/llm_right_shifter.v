@@ -5,11 +5,11 @@ module right_shifter(
 );
 
     initial begin
-        q = 8'b0; // Initialize q to 0
+        q = 8'b00000000; // Initialize q to 0
     end
 
     always @(posedge clk) begin
-        q <= {d, q[7:1]}; // Right shift and insert d into MSB
+        q <= {d, q[7:1]}; // Shift right and insert d into MSB
     end
 
 endmodule

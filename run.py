@@ -32,7 +32,7 @@ parser_runWork.add_argument(
     "--llm", action="store_true", help="Run LLM Working Directory"
 )
 parser_runWork.add_argument(
-    "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+    "--descriptiontype", default='xml', help="Description type", nargs='?', type=str
 )
 parser_runWork.add_argument(
     "--nodebug", action="store_true", help="No Debug with yes/no input"
@@ -47,7 +47,7 @@ parser_runMEICWork.add_argument(
     "--llm", action="store_true", help="Run LLM Working Directory"
 )
 parser_runMEICWork.add_argument(
-    "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+    "--descriptiontype", default='xml', help="Description type", nargs='?', type=str
 )
 parser_runMEICWork.add_argument(
     "--nodebug", action="store_true", help="No Debug with yes/no input"

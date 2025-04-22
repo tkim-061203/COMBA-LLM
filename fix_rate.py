@@ -54,14 +54,17 @@ myexit_str = """#define myexit(condition, content)   \\
     }"""
 
 fix_rate_result = {}
-
+descptionType = 'RTLLM.txt'
 for moduleNormPath in moduleNormPaths:
     moduleName = os.path.basename(moduleNormPath)
-    print('Process module ', moduleName)
-    report_json_path = os.path.join(moduleNormPath, 'reports', f'report_{llm_model}.json')
+    report_json_path = glob.glob(os.path.join(moduleNormPath, 'reports', f'*{llm_model}*{descptionType}.json'))
+    report_json_path = report_json_path[0] if len(report_json_path) else ''
+    print('Process module ', moduleName, report_json_path)
+
     if not os.path.isfile(report_json_path):
         print(f"JSON Report file not found for module {moduleName}")
         continue
+
     with open(report_json_path, 'r') as file:
        report_json_dict = json.load(file)
 
@@ -189,7 +192,7 @@ for moduleNormPath in moduleNormPaths:
 
 print('All fix rate:', fix_rate_result)
 os.makedirs('reports/fixrate', exist_ok=True)
-with open('reports/fixrate/fixrate.json', 'w+') as file:
+with open(f'reports/fixrate/fixrate.{descptionType}.json', 'w+') as file:
     json.dump(fix_rate_result, file, indent=4)
 
 

@@ -18,15 +18,16 @@ module accu(
             data_out <= 10'd0;
         end else begin
             if (valid_in) begin
-                if (count < 3'd4) begin
-                    accumulator <= accumulator + {2'b00, data_in}; // Extend data_in to 10 bits
-                    count <= count + 1;
-                    valid_out <= 1'b0;
-                end
+                // Accumulate data if valid_in is high
+                accumulator <= accumulator + {2'b00, data_in}; // Extend data_in to 10 bits
+                count <= count + 1;
+                valid_out <= 1'b0; // Reset valid_out until we reach 4 inputs
+
+                // Check if we have received 4 inputs
                 if (count == 3'd3) begin
-                    data_out <= accumulator + {2'b00, data_in}; // Add the last input
-                    valid_out <= 1'b1;
-                    // Reset for next accumulation
+                    data_out <= accumulator + {2'b00, data_in}; // Output the accumulated result
+                    valid_out <= 1'b1; // Set valid_out for one cycle
+                    // Reset accumulator and count for next accumulation
                     accumulator <= 10'd0;
                     count <= 3'd0;
                 end

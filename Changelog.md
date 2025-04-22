@@ -31,6 +31,7 @@
 - Log file for new Addition content.
 - Latex table export:
   - Full table: `The Syntax and Functionality Correctness Verification for Different LLMs`.
+  - Full all tables: with `Fix rate`.
 
 ## 3.1.0
 
