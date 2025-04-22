@@ -16,10 +16,39 @@ Vserial2parallel *dut = new Vserial2parallel;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -116,14 +145,14 @@ public:
         {
             if (!(tx->dout_parallel == 0 && tx->dout_valid == 0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout_parallel = 0x%x, tx->dout_valid = 0x%x", tx->dout_parallel, tx->dout_valid);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dout_parallel = 0x%x, dout_valid = 0x%x", 0, 0);
-                printf("\r\n");
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout_parallel = 0x%x, tx->dout_valid = 0x%x", tx->dout_parallel, tx->dout_valid);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dout_parallel = 0x%x, dout_valid = 0x%x", 0, 0);
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->dout_parallel == 0 && tx->dout_valid == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(0, tx->dout_parallel == 0 && tx->dout_valid == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
         else if (tx->dout_valid)
@@ -131,14 +160,14 @@ public:
 
             if (!(tx->dout_parallel == out_tx_ref.dout_parallel))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout_parallel = 0x%x, tx->dout_valid = 0x%x", tx->dout_parallel, tx->dout_valid);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.dout_parallel = 0x%x, tx->dout_valid = 0x%x", out_tx_ref.dout_parallel, tx->dout_valid);
-                printf("\r\n");
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout_parallel = 0x%x, tx->dout_valid = 0x%x", tx->dout_parallel, tx->dout_valid);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.dout_parallel = 0x%x, tx->dout_valid = 0x%x", out_tx_ref.dout_parallel, tx->dout_valid);
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->dout_parallel == out_tx_ref.dout_parallel, "TODO 3 Failed: Parallel logic result of the Verilog module is incorrect")
+                myexit(1, tx->dout_parallel == out_tx_ref.dout_parallel, "TODO 3 Failed: Parallel logic result of the Verilog module is incorrect")
             }
         }
         else if (in->din_valid)

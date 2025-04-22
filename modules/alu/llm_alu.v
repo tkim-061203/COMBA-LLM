@@ -42,8 +42,8 @@ module alu(
                  (aluc == OR)   ? {1'b0, a} | {1'b0, b} :
                  (aluc == XOR)  ? {1'b0, a} ^ {1'b0, b} :
                  (aluc == NOR)  ? ~({1'b0, a} | {1'b0, b}) :
-                 (aluc == SLT)  ? {32'b0, (a < b)} :
-                 (aluc == SLTU) ? {32'b0, ($unsigned(a) < $unsigned(b))} :
+                 (aluc == SLT)  ? {31'b0, (a < b)} :
+                 (aluc == SLTU) ? {31'b0, ($unsigned(a) < $unsigned(b))} :
                  (aluc == LUI)  ? {a[15:0], 16'b0} :
                  33'b0;
 

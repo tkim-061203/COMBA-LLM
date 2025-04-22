@@ -5,7 +5,7 @@ module adder_8bit(
     output [7:0] sum,
     output cout
 );
-    wire [6:0] carry; // Declare carry as 7 bits to hold all carry bits
+    wire [7:0] carry; // Declare carry as 8 bits to hold all carry bits
 
     // Full adder for bit 0
     assign sum[0] = a[0] ^ b[0] ^ cin;
@@ -33,7 +33,9 @@ module adder_8bit(
 
     // Full adder for bit 6
     assign sum[6] = a[6] ^ b[6] ^ carry[5];
-    assign carry[6] = (a[6] & b[6]) | (carry[5] & (a[6] ^ b[6])); // Fix: Drive carry[6]
-    assign sum[7] = a[7] ^ b[7] ^ carry[6]; // Use carry[6] for the last bit
-    assign cout = (a[7] & b[7]) | (carry[6] & (a[7] ^ b[7])); // Use carry[6] for cout
+    assign carry[6] = (a[6] & b[6]) | (carry[5] & (a[6] ^ b[6]));
+
+    // Full adder for bit 7
+    assign sum[7] = a[7] ^ b[7] ^ carry[6];
+    assign cout = (a[7] & b[7]) | (carry[6] & (a[7] ^ b[7]));
 endmodule

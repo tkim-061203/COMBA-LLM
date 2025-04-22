@@ -13,10 +13,39 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -79,30 +108,30 @@ public:
         {
             if (!(tx->yout == 0 && tx->done == 0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->ain = %x, in->bin = %x, in->rst_n = %x, in->start = %x", in->ain, in->bin, in->rst_n, in->start);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->done = %x, tx->yout = %lx", tx->done, tx->yout);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: done = %x, yout = %x", 0, 0);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->ain = %x, in->bin = %x, in->rst_n = %x, in->start = %x", in->ain, in->bin, in->rst_n, in->start);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->done = %x, tx->yout = %lx", tx->done, tx->yout);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: done = %x, yout = %x", 0, 0);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->yout == 0 && tx->done == 0, "TODO 3 Failed: Reset logic result of the Verilog module")
+                myexit(0, tx->yout == 0 && tx->done == 0, "TODO 3 Failed: Reset logic result of the Verilog module")
             }
             else if (tx->done)
             {
                 if (!(tx->yout == ((uint64_t)in->ain * in->bin)))
                 {
                     uint64_t yout = (uint64_t)in->ain * in->bin;
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->ain = %x, in->bin = %x, in->rst_n = %x, in->start = %x", in->ain, in->bin, in->rst_n, in->start);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->done = %x, tx->yout = %lx", tx->done, tx->yout);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: tx->done = %x, yout = %lx", tx->done, yout);
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->ain = %x, in->bin = %x, in->rst_n = %x, in->start = %x", in->ain, in->bin, in->rst_n, in->start);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->done = %x, tx->yout = %lx", tx->done, tx->yout);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: tx->done = %x, yout = %lx", tx->done, yout);
 
-                    printf("\r\n");
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->yout == (in->ain * in->bin), "TODO 3 Failed: Multiplication logic result of the Verilog module")
+                    myexit(1, tx->yout == (in->ain * in->bin), "TODO 3 Failed: Multiplication logic result of the Verilog module")
                 }
             }
         }

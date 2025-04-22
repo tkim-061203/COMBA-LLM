@@ -1,1 +1,1 @@
-### Log for module "parallel2serial"
+### Log for module "accu"

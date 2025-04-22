@@ -14,7 +14,7 @@ module multi_pipe_4bit #(parameter size = 4) (
         // Generate partial products
         for (i = 0; i < size; i = i + 1) begin
             if (mul_b[i])
-                partial_products[i] = mul_a << i; // Correctly shift mul_a without zero extension
+                partial_products[i] = mul_a << i; // Correctly shift mul_a without width expansion
             else
                 partial_products[i] = 'd0;
         end

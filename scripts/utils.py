@@ -11,3 +11,8 @@ def generateWorkFolderArgument(llm=False):
     if llm:
         return (Template.TEMPORARYLLMWORKFOLDERNAME.value, ModuleNamePrefix.LLM.value)
     return (Template.TEMPORARYWORKFOLDERNAME.value, ModuleNamePrefix.VERIFIED.value)
+
+def generateMEICWorkFolderArgument(llm=False):
+    if llm:
+        return (Template.MEIC_TEMPORARYLLMWORKFOLDERNAME.value, )
+    return (Template.MEIC_TEMPORARYWORKFOLDERNAME.value, )

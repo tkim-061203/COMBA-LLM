@@ -16,10 +16,39 @@ Vparallel2serial *dut = new Vparallel2serial;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -114,15 +143,15 @@ public:
         {
             if (!(tx->dout == 0 && tx->valid_out == 0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dout = 0x%x, valid_out = 0x%x", 0, 0);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: dout = 0x%x, valid_out = 0x%x", 0, 0);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->dout == 0 && tx->valid_out == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(0, tx->dout == 0 && tx->valid_out == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
         else if (tx_data_gen_time >= 4) // valid out is on
@@ -138,27 +167,27 @@ public:
             if (tx_data_gen_time == 4)
                 if (!(tx->valid_out == 1))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: valid_out = 0x%x", 1);
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: valid_out = 0x%x", 1);
 
-                    printf("\r\n");
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->valid_out == 1, "TODO 3 Failed: Valid-out logic result of the Verilog module is incorrect")
+                    myexit(1, tx->valid_out == 1, "TODO 3 Failed: Valid-out logic result of the Verilog module is incorrect")
                 }
             if (!(tx->dout == out_tx_ref.dout))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.dout = 0x%x, tx->valid_out = 0x%x", out_tx_ref.dout, tx->valid_out);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rst_n = 0x%x", in->rst_n);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->dout = 0x%x, tx->valid_out = 0x%x", tx->dout, tx->valid_out);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.dout = 0x%x, tx->valid_out = 0x%x", out_tx_ref.dout, tx->valid_out);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->dout == out_tx_ref.dout, "TODO 3 Failed: Parallel logic result of the Verilog module is incorrect")
+                myexit(2, tx->dout == out_tx_ref.dout, "TODO 3 Failed: Parallel logic result of the Verilog module is incorrect")
             }
         }
 
