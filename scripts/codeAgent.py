@@ -830,8 +830,12 @@ Here are the content of the testbench code of the Verilog module:
 
         # description
         description = readFileContent(
-            os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value if self._descriptionType == 'txt' else Template.DESCRIPTIONXMLFILENAME.value)
+            os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value if self._descriptionType == 'txt' else Template.DESCRIPTIONXMLFILENAME.value if self._descriptionType == 'xml' else f'design_description.{self._descriptionType}')
         )
+
+        if self._moduleName not in description:
+            print("End Agent with Iteration trial: ", self._iteration_time)
+            raise Exception(f"Module name {self._moduleName} not in description")
 
         if self._descriptionType == 'xml':
             xmlDescriptionIsValid, formattedXMLDescription = self.checkXMLDescription(description)
@@ -892,7 +896,14 @@ Here are the content of the testbench code of the Verilog module:
         return self
 
     def __call__(self):
+        
         print("Start agent")
+        #
+        # check exist report for RTLLM.txt
+        existReport = glob.glob(os.path.join(self._modulePath, 'reports', f'*{self._descriptionType}.json'))
+        if len(existReport):
+            if self.customInput(f'Skip report-exist module {self._moduleName}, {existReport}', '__call__') == 'y':
+                return
         myiter = iter(self)
 
         # generate first shoot
@@ -915,20 +926,22 @@ Here are the content of the testbench code of the Verilog module:
             if not os.path.isdir(cur_report_path):
                 os.mkdir(cur_report_path)
             # save report.json
+            history_tag = datetime.datetime.now().isoformat()
+            report_json_path = f"report_{self._llm_model}.{self._descriptionType}.json"
             with open(
-                os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w"
+                os.path.join(cur_report_path, report_json_path), "w"
             ) as outfile:
                 json.dump(json_dumps_report, outfile)
 
             # save report history
-            history_tag = datetime.datetime.now().isoformat()
             # history path
+            report_json_path = f"report_{self._llm_model}_{history_tag}.{self._descriptionType}.json"
             cur_history_path = os.path.join(self._modulePath, ".history")
             if not os.path.isdir(cur_history_path):
                 os.mkdir(cur_history_path)
             with open(
                 os.path.join(
-                    cur_history_path, f"report_{self._llm_model}_{history_tag}.json"
+                    cur_history_path, report_json_path
                 ),
                 "w+",
             ) as outfile:

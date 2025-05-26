@@ -16,10 +16,39 @@ Vtraffic_light *dut = new Vtraffic_light;
 #define MAX_SIM_TIME 400
 #define VERIF_START_TIME 7
 #define MAX_STAGE 200
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -140,15 +169,15 @@ public:
         {
             if (!(tx->clock == 0xA && tx->green == 0x0 && tx->red == 0x0 && tx->yellow == 0x0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x, green = 0x%x, red = 0x%x, yellow = 0x%x", 0xA, 0, 0, 0);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x, green = 0x%x, red = 0x%x, yellow = 0x%x", 0xA, 0, 0, 0);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->clock == 0x0 && tx->green == 0x0 && tx->red == 0x0 && tx->yellow == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(0, tx->clock == 0x0 && tx->green == 0x0 && tx->red == 0x0 && tx->yellow == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
         else if (IS_SEQUENTIAL_LOGIC_EVAL(!dut->clk, combinational_logic_update))
@@ -166,54 +195,54 @@ public:
             case 3:
                 if (!(tx->clock == 0xA && LATCH_MANAGEMENT_IS_RISING_EDGE(red_latch_management)))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
 
-                    printf("\r\n");
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0xA && LATCH_MANAGEMENT_IS_RISING_EDGE(red_latch_management), "TODO 3 Failed: Red Output logic result of the Verilog module is incorrect")
+                    myexit(1, tx->clock == 0xA && LATCH_MANAGEMENT_IS_RISING_EDGE(red_latch_management), "TODO 3 Failed: Red Output logic result of the Verilog module is incorrect")
                 }
                 break;
             case 13:
                 if (!(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(red_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(green_latch_management)))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x3C);
-                    printf("\r\n");
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x3C);
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(red_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(green_latch_management), "TODO 3 Failed: Green Output logic result of the Verilog module is incorrect")
+                    myexit(2, tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(red_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(green_latch_management), "TODO 3 Failed: Green Output logic result of the Verilog module is incorrect")
                 }
                 break;
             case 73:
                 if (!(tx->clock == 0x5 && LATCH_MANAGEMENT_IS_FALLING_EDGE(green_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(yellow_latch_management)))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x5);
-                    printf("\r\n");
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0x5);
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(green_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(yellow_latch_management), "TODO 3 Failed: Yellow Output logic result of the Verilog module is incorrect")
+                    myexit(3, tx->clock == 0x3C && LATCH_MANAGEMENT_IS_FALLING_EDGE(green_latch_management) && LATCH_MANAGEMENT_IS_RISING_EDGE(yellow_latch_management), "TODO 3 Failed: Yellow Output logic result of the Verilog module is incorrect")
                 }
                 break;
             case 135:
                 if (!(tx->clock == 0xA && tx->green))
                 {
-                    printf("\r\n# TODO 3 NO Failed at simtime %ld %ld", sim_time, tx_data_gen_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
-                    printf("\r\n");
+                    Debug_printf("\r\n# TODO 3 NO Failed at simtime %ld %ld", sim_time, tx_data_gen_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->pass_request = 0x%x, in->rst_n = 0x%x", in->pass_request, in->rst_n);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->clock = 0x%x, tx->green = 0x%x, tx->red = 0x%x, tx->yellow = 0x%x", tx->clock, tx->green, tx->red, tx->yellow);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: clock = 0x%x", 0xA);
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->clock == 0xA && tx->green, "TODO 3 Failed: pass_request logic result of the Verilog module is incorrect")
+                    myexit(4, tx->clock == 0xA && tx->green, "TODO 3 Failed: pass_request logic result of the Verilog module is incorrect")
                 }
                 break;
 

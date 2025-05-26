@@ -14,10 +14,39 @@ using namespace std;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 6
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -77,14 +106,14 @@ public:
         {
             if (!(tx->res_valid == 0 && tx->result == 0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->dividend = 0x%x, in->divisor = 0x%x, in->opn_valid = 0x%x, in->res_ready = 0x%x, in->sign = 0x%x", in->dividend, in->divisor, in->opn_valid, in->res_ready, in->sign);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->res_valid = 0x%x, tx->result = 0x%x", tx->res_valid, tx->result);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->dividend = 0x%x, in->divisor = 0x%x, in->opn_valid = 0x%x, in->res_ready = 0x%x, in->sign = 0x%x", in->dividend, in->divisor, in->opn_valid, in->res_ready, in->sign);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->res_valid = 0x%x, tx->result = 0x%x", tx->res_valid, tx->result);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->res_valid == 0 && tx->result == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(0, tx->res_valid == 0 && tx->result == 0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
         else if (tx_data_gen_time == 3)
@@ -105,14 +134,14 @@ public:
 
             if (!(tx->result == result))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->dividend = 0x%x, in->divisor = 0x%x, in->opn_valid = 0x%x, in->res_ready = 0x%x, in->sign = 0x%x", in->dividend, in->divisor, in->opn_valid, in->res_ready, in->sign);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->res_valid = 0x%x, tx->result = 0x%x", tx->res_valid, tx->result);
-                printf("\r\n# TODO 3 OUTPUT TRACE: remainder = 0x%x, quotient = 0x%x", remainer, quotient);
-                printf("\r\n");
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->dividend = 0x%x, in->divisor = 0x%x, in->opn_valid = 0x%x, in->res_ready = 0x%x, in->sign = 0x%x", in->dividend, in->divisor, in->opn_valid, in->res_ready, in->sign);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->res_valid = 0x%x, tx->result = 0x%x", tx->res_valid, tx->result);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: remainder = 0x%x, quotient = 0x%x", remainer, quotient);
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->result == result, "TODO 3 Failed: Division logic result of the Verilog module is incorrect when res_valid is on")
+                myexit(1, tx->result == result, "TODO 3 Failed: Division logic result of the Verilog module is incorrect when res_valid is on")
             }
         }
 

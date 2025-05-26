@@ -13,10 +13,39 @@ using namespace std;
 #define IS_SIM_TIME_IN_RST(sim_time) (sim_time >= 3 && sim_time < 6)
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
-#define myexit(condition, content)   \
-    {                                \
-        assert(condition &&content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -71,14 +100,14 @@ public:
         /* TODO BEGIN 3 */
         if (!((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin)))
         {
-            printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-            printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->cin = 0x%x", in->a, in->b, in->cin);
-            printf("\r\n# TODO 3 OUTPUT TRACE: tx->cout = 0x%x, tx->sum = 0x%x", tx->cout, tx->sum);
+            Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+            Debug_printf("\r\n# TODO 3 INPUT TRACE: in->a = 0x%x, in->b = 0x%x, in->cin = 0x%x", in->a, in->b, in->cin);
+            Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->cout = 0x%x, tx->sum = 0x%x", tx->cout, tx->sum);
 
-            printf("\r\n");
+            Debug_printf("\r\n");
             fflush(stdout);
 
-            myexit((tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin), "TODO 3 Failed: Addition logic result is incorrect")
+            myexit(0, (tx->sum | (tx->cout << 8)) == (in->a + in->b + in->cin), "TODO 3 Failed: Addition logic result is incorrect")
         }
         /* TODO END 3 */
         delete in;

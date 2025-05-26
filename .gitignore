@@ -1,5 +1,4 @@
-.work
-.llmwork
+.*work
 .env
 .ignore
 **/*.pyc

@@ -4,10 +4,12 @@ load_dotenv()
 import argparse, os, shutil, typing, glob
 import datetime
 from scripts.langchain_groq_util import generate as llmGenerate
-from scripts.utils import md_code_extract, generateWorkFolderArgument
+from scripts.utils import md_code_extract, generateWorkFolderArgument, generateMEICWorkFolderArgument
 from scripts.constants import Commands, ModuleNamePrefix, Template
 from scripts.rag import ragCreate
 from scripts.codeAgent import LLMCodeAgent
+from scripts.MEICCodeAgent import MEICLLMCodeAgent
+
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(
@@ -21,6 +23,7 @@ parser_createmodule = subparsers.add_parser(
     Commands.CREATEMODULE.value, help="Create new module project"
 )
 
+#
 parser_runWork = subparsers.add_parser(
     Commands.RUNWORK.value, help="Run projects with verilog module"
 )
@@ -29,12 +32,28 @@ parser_runWork.add_argument(
     "--llm", action="store_true", help="Run LLM Working Directory"
 )
 parser_runWork.add_argument(
-    "--descriptiontype", default='xml', help="Description type", nargs='?', choices=('xml', 'txt')
+    "--descriptiontype", default='xml', help="Description type", nargs='?', type=str
 )
 parser_runWork.add_argument(
     "--nodebug", action="store_true", help="No Debug with yes/no input"
 )
 
+#
+parser_runMEICWork = subparsers.add_parser(
+    Commands.RUNMEIC.value, help="Run projects with verilog module of MEIC"
+)
+parser_runMEICWork.add_argument("modules", nargs="*")
+parser_runMEICWork.add_argument(
+    "--llm", action="store_true", help="Run LLM Working Directory"
+)
+parser_runMEICWork.add_argument(
+    "--descriptiontype", default='xml', help="Description type", nargs='?', type=str
+)
+parser_runMEICWork.add_argument(
+    "--nodebug", action="store_true", help="No Debug with yes/no input"
+)
+
+#
 parser_makeWork = subparsers.add_parser(
     Commands.MAKEWORK.value, help="Make projects with verilog module"
 )
@@ -50,10 +69,6 @@ parser_generate.add_argument("modules", nargs="*")
 
 parser_rag = subparsers.add_parser(Commands.RAG.value, help="RAG Interface")
 parser_rag.add_argument("ragfile")
-
-
-args = parser.parse_args()
-
 
 def createmodule():
     modulename = input("Module name: ")
@@ -186,6 +201,41 @@ def makeWorkingFolder(
         moduleWorkPath = os.path.join(workFolderName, moduleName, f"{moduleName}.v")
         os.link(moduleSourcePath, moduleWorkPath)
 
+def makeMEICWorkingFolder(
+    modulePaths: typing.List[str],
+    workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
+    moduleNamePrefix=ModuleNamePrefix.LLM.value,
+    referenceModuleDir=Template.MODULEFOLDER.value,
+):
+
+    if not os.path.isdir(workFolderName):
+        os.mkdir(workFolderName)
+
+    for modulePath in modulePaths:
+        moduleNormPath = os.path.normpath(modulePath)
+        moduleName = os.path.basename(moduleNormPath)
+
+        moduleNameWorkPath = os.path.join(workFolderName, moduleName)
+        referenceModuleNameWorkPath = os.path.join(referenceModuleDir, moduleName)
+        
+
+        if os.path.isdir(moduleNameWorkPath):
+            shutil.rmtree(moduleNameWorkPath)
+        os.mkdir(moduleNameWorkPath)
+
+        tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
+        tbModulePath = os.path.join(referenceModuleNameWorkPath, tbModuleFileName)
+        tbWorkPath = os.path.join(moduleNameWorkPath, tbModuleFileName)
+        os.link(tbModulePath, tbWorkPath)
+
+        moduleSourcePath = os.path.join(modulePath, f"{moduleNamePrefix}{moduleName}.v")
+        moduleWorkPath = os.path.join(workFolderName, moduleName, f"{moduleName}.v")
+
+        if not os.path.isfile(moduleSourcePath):
+            open(moduleSourcePath, 'w+').close()
+
+        os.link(moduleSourcePath, moduleWorkPath)
+
 
 def generate(modulePaths: list):
     moduleNormPaths = [os.path.normpath(modulePath) for modulePath in modulePaths]
@@ -295,16 +345,99 @@ def runFlow(
     history_tag = datetime.datetime.now().isoformat()
     shutil.copyfile('reports/log/log.txt', f'reports/log/.history/log_{llm_model}_{history_tag}.txt')
 
-match args.command:
-    case Commands.CREATEMODULE.value:
-        createmodule()
-    case Commands.RUNWORK.value:
-        runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype, args.nodebug)))
-    case Commands.MAKEWORK.value:
-        makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
-    case Commands.GENERATE.value:
-        generate(args.modules)
-    case Commands.RAG.value:
-        ragCreate(args.ragfile)
+def runMeicFlow(
+    modulePaths: typing.List[str],
+    workFolderName=Template.MEIC_TEMPORARYWORKFOLDERNAME.value,
+    moduleNamePrefix=ModuleNamePrefix.LLM.value,
+    desciptionType='txt',
+    nodebug=False,
+    llm_model="gpt-4o-mini-2024-07-18",
+):
+    moduleGlobPaths = []
+    for modulePath in modulePaths:
+        moduleGlobPaths += glob.glob(modulePath)
 
-print("your args", args)
+    moduleNormPaths = [os.path.normpath(modulePath) for modulePath in moduleGlobPaths]
+
+    defaultInputDirYAll = {
+            'yall': True,
+            'nall': False
+        }
+    customInputDirective = {
+        'syntax_compile': {
+            'yall': False,
+            'nall': True
+        },
+        'syntax_compile_route': defaultInputDirYAll,
+        'tb_simulation_route': defaultInputDirYAll,
+        'chatbot_code_generator': defaultInputDirYAll,
+        "__next__": defaultInputDirYAll
+    } if nodebug else {}
+
+    moduletqdm = tqdm(total=len(moduleGlobPaths), desc='Module')
+
+    #
+    # log file
+    # create file if not exist
+    if not os.path.isfile('reports/log/log_meic.txt'):
+        open('reports/log/log_meic.txt', 'w+').close()
+    # clear file
+    with open('reports/log/log_meic.txt', 'w+') as file:
+        file.write('')
+
+    for moduleNormPath in moduleNormPaths:
+
+        moduletqdm.update(1)
+        moduleName = os.path.basename(moduleNormPath)
+
+        #
+        # check if module is available in module path
+        if not os.path.isdir(os.path.join(Template.MODULEFOLDER.value, moduleName)):
+            print(f'MEIC module {moduleName} not found in refence module path.')
+            continue
+
+        #
+        with open('reports/log/log.txt', 'a') as file:
+            print(f"### Log for module \"{moduleName}\"", sep='\n', file=file)
+        
+        makeMEICWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
+
+        #
+        print("flow here", moduleNormPath, moduleName)
+        llmCodeAgent = MEICLLMCodeAgent(
+            modulePath=moduleNormPath,
+            workFolderName=workFolderName,
+            llm_model=llm_model,
+            model_provider="openai",
+            temperature=0,
+            descriptionType=desciptionType,
+            customInputDirective=customInputDirective
+        )
+        llmCodeAgent()
+    
+    # #
+    # history log
+    # mkdir if not exist
+    if not os.path.isdir('reports/log/.history'):
+        os.mkdir('reports/log/.history')
+    
+    history_tag = datetime.datetime.now().isoformat()
+    shutil.copyfile('reports/log/log_meic.txt', f'reports/log/.history/log_meic_{llm_model}_{history_tag}.txt')
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    match args.command:
+        case Commands.CREATEMODULE.value:
+            createmodule()
+        case Commands.RUNWORK.value:
+            runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype, args.nodebug)))
+        case Commands.RUNMEIC.value:
+            runMeicFlow(args.modules, desciptionType=args.descriptiontype, nodebug=args.nodebug)
+        case Commands.MAKEWORK.value:
+            makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
+        case Commands.GENERATE.value:
+            generate(args.modules)
+        case Commands.RAG.value:
+            ragCreate(args.ragfile)
+
+    print("your args", args)

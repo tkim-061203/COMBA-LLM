@@ -16,10 +16,39 @@ Valu *dut = new Valu;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -248,19 +277,14 @@ public:
               tx->flag.overflow == out_tx_ref.flag.overflow &&
               tx->flag.zero == out_tx_ref.flag.zero))
         {
-            printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-            printf("\r\n# TODO 3 INPUT TRACE: in->a.a = 0x%lx, in->b.b = 0x%lx, in->aluc = 0x%x", in->a.a, in->b.b, in->aluc);
-            printf("\r\n# TODO 3 OUTPUT TRACE: tx->flag.carry = 0x%x, tx->flag.flag = 0x%x, tx->flag.negative = 0x%x, tx->flag.overflow = 0x%x, tx->flag.zero = 0x%x, tx->r = 0x%lx", tx->flag.carry, tx->flag.flag, tx->flag.negative, tx->flag.overflow, tx->flag.zero, tx->r);
-            printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.flag.carry = 0x%x, out_tx_ref.flag.flag = 0x%x, out_tx_ref.flag.negative = 0x%x, out_tx_ref.flag.overflow = 0x%x, out_tx_ref.flag.zero = 0x%x, out_tx_ref.r = 0x%x, out_tx_ref.r = 0x%x", out_tx_ref.flag.carry, out_tx_ref.flag.flag, out_tx_ref.flag.negative, out_tx_ref.flag.overflow, out_tx_ref.flag.zero, out_tx_ref.r, (uint32_t)out_tx_ref.r);
-            printf("\r\n");
+            Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+            Debug_printf("\r\n# TODO 3 INPUT TRACE: in->a.a = 0x%lx, in->b.b = 0x%lx, in->aluc = 0x%x", in->a.a, in->b.b, in->aluc);
+            Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->flag.carry = 0x%x, tx->flag.flag = 0x%x, tx->flag.negative = 0x%x, tx->flag.overflow = 0x%x, tx->flag.zero = 0x%x, tx->r = 0x%lx", tx->flag.carry, tx->flag.flag, tx->flag.negative, tx->flag.overflow, tx->flag.zero, tx->r);
+            Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: out_tx_ref.flag.carry = 0x%x, out_tx_ref.flag.flag = 0x%x, out_tx_ref.flag.negative = 0x%x, out_tx_ref.flag.overflow = 0x%x, out_tx_ref.flag.zero = 0x%x, out_tx_ref.r = 0x%x, out_tx_ref.r = 0x%x", out_tx_ref.flag.carry, out_tx_ref.flag.flag, out_tx_ref.flag.negative, out_tx_ref.flag.overflow, out_tx_ref.flag.zero, out_tx_ref.r, (uint32_t)out_tx_ref.r);
+            Debug_printf("\r\n");
             fflush(stdout);
 
-            myexit(tx->r == (out_tx_ref.r & 0xffffffff) &&
-                       tx->flag.carry == out_tx_ref.flag.carry &&
-                       tx->flag.flag == out_tx_ref.flag.flag &&
-                       tx->flag.negative == out_tx_ref.flag.negative &&
-                       tx->flag.overflow == out_tx_ref.flag.overflow &&
-                       tx->flag.zero == out_tx_ref.flag.zero,
+            myexit(0, tx->r == (out_tx_ref.r & 0xffffffff) && tx->flag.carry == out_tx_ref.flag.carry && tx->flag.flag == out_tx_ref.flag.flag && tx->flag.negative == out_tx_ref.flag.negative && tx->flag.overflow == out_tx_ref.flag.overflow && tx->flag.zero == out_tx_ref.flag.zero,
                    "TODO 3 Failed: Operation logic result of the Verilog module is incorrect")
         }
         /* TODO END 3 */

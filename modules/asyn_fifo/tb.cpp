@@ -16,10 +16,39 @@ Vasyn_fifo *dut = new Vasyn_fifo;
 #define MAX_SIM_TIME 300
 #define VERIF_START_TIME 7
 #define MAX_STAGE 100
-#define myexit(condition, content)    \
-    {                                 \
-        assert(condition && content); \
+#ifndef NO_FALTAL_TB
+#define myexit(index, condition, content) \
+    {                                     \
+        assert(condition && content);     \
     }
+#else
+uint8_t NO_FALTAL_indexs[20] = {0};
+#define myexit(index, condition, content)             \
+    {                                                 \
+        if (!(condition) && !NO_FALTAL_indexs[index]) \
+        {                                             \
+            /**/ printf("\r\n");                      \
+            /**/ printf(content);                     \
+            NO_FALTAL_indexs[index] = 1;              \
+        }                                             \
+        fflush(stdout);                               \
+    }
+#endif
+int Debug_printf(const char *fmt, ...)
+{
+#ifndef NO_FALTAL_TB
+    int done;
+    va_list args;
+    va_start(args, fmt);
+
+    done = vprintf(fmt, args);
+
+    va_end(args);
+    return done;
+#else
+    return 0;
+#endif
+}
 
 vluint64_t sim_time = 0;
 vluint64_t tx_data_gen_time = 0;
@@ -139,15 +168,15 @@ public:
         {
             if (!(tx->rempty == 0x1 && tx->wfull == 0x0))
             {
-                printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
-                printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
-                printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: rempty = 0x%x, wfull = 0x%x", 1, 0);
+                Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: rempty = 0x%x, wfull = 0x%x", 1, 0);
 
-                printf("\r\n");
+                Debug_printf("\r\n");
                 fflush(stdout);
 
-                myexit(tx->rempty == 0x1 && tx->wfull == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
+                myexit(0, tx->rempty == 0x1 && tx->wfull == 0x0, "TODO 3 Failed: Reset logic result of the Verilog module is incorrect")
             }
         }
         else if (IS_SEQUENTIAL_LOGIC_EVAL(dut->wclk, combinational_logic_update))
@@ -156,28 +185,28 @@ public:
             {
                 if (!(tx->rempty == 0x0 && tx->wfull == 0x1))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
-                    printf("\r\n");
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->rempty == 0x0 && tx->wfull == 0x1, "TODO 3 Failed: wfull logic result of the Verilog module is incorrect")
+                    myexit(1, tx->rempty == 0x0 && tx->wfull == 0x1, "TODO 3 Failed: wfull logic result of the Verilog module is incorrect")
                 }
             }
             else if (tx_data_gen_time == 11 && IS_SEQUENTIAL_LOGIC_EVAL(dut->rclk, combinational_logic_update))
             {
                 if (!(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr]))
                 {
-                    printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
-                    printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
-                    printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
-                    printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
-                    printf("\r\n");
+                    Debug_printf("\r\n# TODO 3 Failed at simtime %ld", sim_time);
+                    Debug_printf("\r\n# TODO 3 INPUT TRACE: in->rinc = 0x%x, in->rrstn = 0x%x, in->wdata = 0x%x, in->winc = 0x%x, in->wrstn = 0x%x", in->rinc, in->rrstn, in->wdata, in->winc, in->wrstn);
+                    Debug_printf("\r\n# TODO 3 OUTPUT TRACE: tx->rdata = 0x%x, tx->rempty = 0x%x, tx->wfull = 0x%x", tx->rdata, tx->rempty, tx->wfull);
+                    Debug_printf("\r\n# TODO 3 REFERENCE OUTPUT TRACE: internal_tx_ref.RAM[internal_tx_ref.addr] = 0x%x, internal_tx_ref.addr = 0x%x", internal_tx_ref.RAM[internal_tx_ref.addr], internal_tx_ref.addr);
+                    Debug_printf("\r\n");
                     fflush(stdout);
 
-                    myexit(tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr], "TODO 3 Failed: rdata logic result of the Verilog module is incorrect")
+                    myexit(2, tx->rempty == 0x0 && tx->rdata == internal_tx_ref.RAM[internal_tx_ref.addr], "TODO 3 Failed: rdata logic result of the Verilog module is incorrect")
                 }
             }
         }

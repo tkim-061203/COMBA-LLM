@@ -14,6 +14,11 @@ class Template(Enum):
     TEMPORARYLLMWORKFOLDERNAME = ".llmwork"
     LLMCACHEFOLDER = ".llmcache"
 
+    #
+    # MEIC
+    MEIC_TEMPORARYLLMWORKFOLDERNAME = ".meicllmwork"
+    MEIC_TEMPORARYWORKFOLDERNAME = ".meicwork"
+    MEIC_MODULEFOLDER = "MEIC/ErrorSet"
 
 class Commands(Enum):
     RUNVERIFIED = "runverified"
@@ -21,6 +26,7 @@ class Commands(Enum):
     MAKEVERIFIED = "makeverified"
     GENERATE = "generate"
     RUNWORK = "run"
+    RUNMEIC = "runmeic"
     MAKEWORK = "makework"
     RAG = "rag"
 
