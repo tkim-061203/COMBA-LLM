@@ -22,15 +22,15 @@ module width_8to16(
                     // Store the first valid data
                     data_lock <= data_in;
                     data_ready <= 1'b1;
-                    valid_out <= 1'b0; // Output not valid yet
                 end else begin
-                    // Concatenate the stored data and the new data
+                    // Concatenate the first and second valid data
                     data_out <= {data_lock, data_in};
-                    valid_out <= 1'b1; // Output is valid
-                    data_ready <= 1'b0; // Reset the ready flag
+                    valid_out <= 1'b1;
+                    data_ready <= 1'b0; // Reset for next data pair
                 end
+            end else begin
+                valid_out <= 1'b0; // No valid output if input is not valid
             end
         end
     end
-
 endmodule

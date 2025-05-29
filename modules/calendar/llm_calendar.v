@@ -1,6 +1,6 @@
 module calendar(
-    input CLK,
-    input RST,
+    input wire CLK,
+    input wire RST,
     output reg [5:0] Hours,
     output reg [5:0] Mins,
     output reg [5:0] Secs

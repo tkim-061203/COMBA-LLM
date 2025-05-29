@@ -511,7 +511,7 @@ Here is the related in-line content with the {exceptionType}:
         additionRetState |= {
                 "tb_failed": tb_failed,
         }
-        print("tb_failed", tb_failed)
+        print("tb_failed", tb_failed, resultSTDOUTUTF8)
 
         if "todoNum" in tb_failed:
             prompt = """The funtion of the generated module is incorrect due to the testbench check.

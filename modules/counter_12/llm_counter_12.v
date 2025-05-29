@@ -7,12 +7,12 @@ module counter_12(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            out <= 4'b0000; // Reset the counter to 0
+            out <= 4'b0000; // Reset to 0
         end else if (valid_count) begin
             if (out == 4'd11) begin
                 out <= 4'b0000; // Wrap around to 0
             end else begin
-                out <= out + 1; // Increment the counter
+                out <= out + 1; // Increment counter
             end
         end
     end

@@ -5,7 +5,10 @@ module adder_8bit(
     output [7:0] y,
     output Co
 );
-    assign {Co, y} = a + b + {7'b0, Cin}; // Extend Cin to 8 bits
+    wire [8:0] sum;
+    assign sum = a + b + {7'b0, Cin}; // Extend Cin to 8 bits
+    assign y = sum[7:0];
+    assign Co = sum[8];
 endmodule
 
 module adder_16bit(
@@ -15,26 +18,24 @@ module adder_16bit(
     output [15:0] y,
     output Co
 );
-    wire [7:0] sum0, sum1;
-    wire Co0, Co1;
+    wire Co1;
+    wire [7:0] y1, y2;
 
-    // Instantiate two 8-bit adders
-    adder_8bit adder0 (
+    adder_8bit adder_lower (
         .a(a[7:0]),
         .b(b[7:0]),
         .Cin(Cin),
-        .y(sum0),
-        .Co(Co0)
-    );
-
-    adder_8bit adder1 (
-        .a(a[15:8]),
-        .b(b[15:8]),
-        .Cin(Co0),
-        .y(sum1),
+        .y(y1),
         .Co(Co1)
     );
 
-    assign y = {sum1, sum0};
-    assign Co = Co1;
+    adder_8bit adder_upper (
+        .a(a[15:8]),
+        .b(b[15:8]),
+        .Cin(Co1),
+        .y(y2),
+        .Co(Co)
+    );
+
+    assign y = {y2, y1};
 endmodule
