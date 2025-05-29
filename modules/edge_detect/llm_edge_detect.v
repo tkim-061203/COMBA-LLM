@@ -1,11 +1,10 @@
 module edge_detect(
-    input wire clk,
-    input wire rst_n,
-    input wire a,
+    input clk,
+    input rst_n,
+    input a,
     output reg rise,
     output reg down
 );
-
     reg a_prev;
 
     always @(posedge clk or negedge rst_n) begin
@@ -14,22 +13,15 @@ module edge_detect(
             down <= 0;
             a_prev <= 0;
         end else begin
-            // Detect rising edge
+            rise <= 0; // Default to 0
+            down <= 0; // Default to 0
             if (a && !a_prev) begin
-                rise <= 1;
-            end else begin
-                rise <= 0;
+                rise <= 1; // Rising edge detected
             end
-
-            // Detect falling edge
             if (!a && a_prev) begin
-                down <= 1;
-            end else begin
-                down <= 0;
+                down <= 1; // Falling edge detected
             end
-
-            // Store the previous state of a
-            a_prev <= a;
+            a_prev <= a; // Update previous state
         end
     end
 endmodule

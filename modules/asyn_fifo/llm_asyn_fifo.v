@@ -1,13 +1,14 @@
-module dual_port_RAM #(parameter DEPTH = 16, parameter WIDTH = 8) (
-    input wclk,
-    input wenc,
-    input [$clog2(DEPTH)-1:0] waddr,
-    input [WIDTH-1:0] wdata,
-    input rclk,
-    input renc,
-    input [$clog2(DEPTH)-1:0] raddr,
+module dual_port_RAM #(parameter WIDTH = 8, parameter DEPTH = 16) (
+    input wire wclk,
+    input wire wenc,
+    input wire [$clog2(DEPTH)-1:0] waddr,
+    input wire [WIDTH-1:0] wdata,
+    input wire rclk,
+    input wire renc,
+    input wire [$clog2(DEPTH)-1:0] raddr,
     output reg [WIDTH-1:0] rdata
 );
+
     reg [WIDTH-1:0] RAM_MEM [0:DEPTH-1];
 
     always @(posedge wclk) begin
@@ -21,81 +22,121 @@ module dual_port_RAM #(parameter DEPTH = 16, parameter WIDTH = 8) (
             rdata <= RAM_MEM[raddr];
         end
     end
+
 endmodule
 
+
 module asyn_fifo #(parameter WIDTH = 8, parameter DEPTH = 16) (
-    input wclk,
-    input rclk,
-    input wrstn,
-    input rrstn,
-    input winc,
-    input rinc,
-    input [WIDTH-1:0] wdata,
-    output reg wfull,
-    output reg rempty,
+    input wire wclk,
+    input wire rclk,
+    input wire wrstn,
+    input wire rrstn,
+    input wire winc,
+    input wire rinc,
+    input wire [WIDTH-1:0] wdata,
+    output wire wfull,
+    output wire rempty,
     output reg [WIDTH-1:0] rdata
 );
 
     localparam ADDR_WIDTH = $clog2(DEPTH);
-    reg [ADDR_WIDTH-1:0] waddr_bin, raddr_bin;
-    reg [ADDR_WIDTH-1:0] wptr, rptr;
-    reg [ADDR_WIDTH-1:0] wptr_buff, rptr_buff;
-    reg wenc;
 
-    // Dual-port RAM instance
-    dual_port_RAM #(DEPTH, WIDTH) ram (
-        .wclk(wclk),
-        .wenc(wenc),
-        .waddr(waddr_bin),
-        .wdata(wdata),
-        .rclk(rclk),
-        .renc(rinc),
-        .raddr(raddr_bin),
-        .rdata(rdata)
-    );
+    reg [ADDR_WIDTH:0] waddr_bin;
+    reg [ADDR_WIDTH:0] raddr_bin;
+    reg [ADDR_WIDTH:0] wptr;
+    reg [ADDR_WIDTH:0] rptr;
+    reg [ADDR_WIDTH:0] wptr_buff;
+    reg [ADDR_WIDTH:0] rptr_buff;
+    reg [ADDR_WIDTH:0] rptr_syn;
+    reg [ADDR_WIDTH:0] wptr_syn;
 
-    // Write pointer logic
+    wire wen = winc && !wfull;
+    wire ren = rinc && !rempty;
+
+    // Write address logic
     always @(posedge wclk or negedge wrstn) begin
         if (!wrstn) begin
             waddr_bin <= 0;
-            wptr <= 0;
-            wenc <= 0;
-        end else if (winc) begin
-            waddr_bin <= wptr; // Use wptr for addressing
-            wenc <= 1; // Enable write
-            wptr <= wptr + 1; // Increment write pointer
-        end else begin
-            wenc <= 0; // Disable write when not writing
+        end else if (wen) begin
+            waddr_bin <= waddr_bin + 1;
         end
     end
 
-    // Read pointer logic
+    // Read address logic
     always @(posedge rclk or negedge rrstn) begin
         if (!rrstn) begin
             raddr_bin <= 0;
-            rptr <= 0;
-        end else if (rinc) begin
-            raddr_bin <= rptr; // Use rptr for addressing
-            rptr <= rptr + 1; // Increment read pointer
+        end else if (ren) begin
+            raddr_bin <= raddr_bin + 1;
         end
     end
 
-    // Gray code conversion
-    wire [ADDR_WIDTH-1:0] wptr_gray = (wptr >> 1) ^ wptr;
-    wire [ADDR_WIDTH-1:0] rptr_gray = (rptr >> 1) ^ rptr;
-
-    // Pointer buffers for synchronization
-    always @(posedge wclk) begin
-        wptr_buff <= wptr_gray;
+    // Gray code conversion for write pointer
+    always @(posedge wclk or negedge wrstn) begin
+        if (!wrstn) begin
+            wptr <= 0;
+        end else begin
+            wptr <= (waddr_bin >> 1) ^ waddr_bin;
+        end
     end
 
-    always @(posedge rclk) begin
-        rptr_buff <= rptr_gray;
+    // Gray code conversion for read pointer
+    always @(posedge rclk or negedge rrstn) begin
+        if (!rrstn) begin
+            rptr <= 0;
+        end else begin
+            rptr <= (raddr_bin >> 1) ^ raddr_bin;
+        end
     end
 
-    // Full and empty signal generation
-    always @* begin
-        wfull = (wptr_buff[ADDR_WIDTH-1] ^ rptr_buff[ADDR_WIDTH-1]) && (wptr_buff[ADDR_WIDTH-2:0] == rptr_buff[ADDR_WIDTH-2:0]);
-        rempty = (wptr_buff == rptr_buff);
+    // Synchronize read pointer
+    always @(posedge wclk or negedge wrstn) begin
+        if (!wrstn) begin
+            rptr_buff <= 0;
+        end else begin
+            rptr_buff <= rptr;
+        end
     end
+
+    always @(posedge rclk or negedge rrstn) begin
+        if (!rrstn) begin
+            rptr_syn <= 0;
+        end else begin
+            rptr_syn <= rptr_buff;
+        end
+    end
+
+    // Synchronize write pointer
+    always @(posedge rclk or negedge rrstn) begin
+        if (!rrstn) begin
+            wptr_buff <= 0;
+        end else begin
+            wptr_buff <= wptr;
+        end
+    end
+
+    always @(posedge wclk or negedge wrstn) begin
+        if (!wrstn) begin
+            wptr_syn <= 0;
+        end else begin
+            wptr_syn <= wptr_buff;
+        end
+    end
+
+    // Full and empty logic
+    assign wfull = (wptr == {~rptr_syn[ADDR_WIDTH:ADDR_WIDTH-1], rptr_syn[ADDR_WIDTH-2:0]});
+    assign rempty = (rptr == wptr_syn);
+
+    // Dual-port RAM instantiation
+    dual_port_RAM #(.WIDTH(WIDTH), .DEPTH(DEPTH)) ram_inst (
+        .wclk(wclk),
+        .wenc(wen),
+        .waddr(waddr_bin[ADDR_WIDTH-1:0]),
+        .wdata(wdata),
+        .rclk(rclk),
+        .renc(ren),
+        .raddr(raddr_bin[ADDR_WIDTH-1:0]),
+        .rdata(rdata)
+    );
+
 endmodule

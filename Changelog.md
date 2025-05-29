@@ -22,6 +22,12 @@
 - Verifier for sequential and combinational verification after Verilog generation.
 - [ ] Global debug log for `New addition content for Verilator warning`.
 
+## 3.3.0
+
+`29-05-2025`
+
+- Table for Benchmarking Exception Trials.
+
 ## 3.2.0
 
 `19-04-2025`

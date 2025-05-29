@@ -1,15 +1,14 @@
 module alu(
-    input  wire [31:0] a,
-    input  wire [31:0] b,
-    input  wire [5:0] aluc,
-    output reg [31:0] r,
-    output wire zero,
-    output wire carry,
-    output wire negative,
-    output wire overflow,
-    output reg flag
+    input  [31:0] a,
+    input  [31:0] b,
+    input  [5:0] aluc,
+    output [31:0] r,
+    output zero,
+    output carry,
+    output negative,
+    output overflow,
+    output flag
 );
-
     parameter ADD  = 6'b100000;
     parameter ADDU = 6'b100001;
     parameter SUB  = 6'b100010;
@@ -28,61 +27,34 @@ module alu(
     parameter SRAV = 6'b000111;
     parameter LUI  = 6'b001111;
 
-    wire signed [31:0] signed_a = a;
-    wire signed [31:0] signed_b = b;
-    reg [31:0] res;
+    wire [32:0] res;
+    assign res = (aluc == SLL) ? {1'b0, b << a} :
+                 (aluc == SRL) ? {1'b0, b >> a} :
+                 (aluc == SRA) ? {b[31], b >> a} :
+                 (aluc == SLLV) ? {1'b0, b << a[4:0]} :
+                 (aluc == SRLV) ? {1'b0, b >> a[4:0]} :
+                 (aluc == SRAV) ? {b[31], b >> a[4:0]} :
+                 (aluc == ADD)  ? a + b :
+                 (aluc == ADDU) ? a + b :
+                 (aluc == SUB)  ? a - b :
+                 (aluc == SUBU) ? a - b :
+                 (aluc == AND)  ? {1'b0, a} & {1'b0, b} :
+                 (aluc == OR)   ? {1'b0, a} | {1'b0, b} :
+                 (aluc == XOR)  ? {1'b0, a} ^ {1'b0, b} :
+                 (aluc == NOR)  ? ~({1'b0, a} | {1'b0, b}) :
+                 (aluc == SLT)  ? {31'b0, (a < b)} :
+                 (aluc == SLTU) ? {31'b0, ($unsigned(a) < $unsigned(b))} :
+                 (aluc == LUI)  ? {a[15:0], 16'b0} :
+                 33'b0;
 
-    assign zero = (res == 32'b0);
-    assign negative = res[31];
-    assign carry = (aluc == ADD || aluc == ADDU) ? (res < signed_a || res < signed_b) : 1'b0;
-    assign overflow = ((aluc == ADD || aluc == SUB) && ((signed_a > 0 && signed_b > 0 && res < 0) || (signed_a < 0 && signed_b < 0 && res >= 0))); 
-
-    always @(*) begin
-        case (aluc)
-            ADD:  res = a + b;
-            ADDU: res = a + b;
-            SUB:  res = a - b;
-            SUBU: res = a - b;
-            AND:  res = a & b;
-            OR:   res = a | b;
-            XOR:  res = a ^ b;
-            NOR:  res = ~(a | b);
-            SLT:  begin
-                res = (signed_a < signed_b) ? 32'b1 : 32'b0;
-                flag = 1'b1;
-            end
-            SLTU: begin
-                res = (a < b) ? 32'b1 : 32'b0;
-                flag = 1'b1;
-            end
-            SLL:  res = b << a[4:0];
-            SRL:  res = b >> a[4:0];
-            SRA:  res = $signed(b) >>> a[4:0];
-            SLLV: res = b << (a & 32'h1F);
-            SRLV: res = b >> (a & 32'h1F);
-            SRAV: res = $signed(b) >>> (a & 32'h1F);
-            LUI:  res = (a & 32'hFFFF) << 16;
-            default: res = 32'b0;
-        endcase
-    end
-
-    always @(*) begin
-        r = res;
-    end
-
-    always @(*) begin
-        if (aluc == SLT || aluc == SLTU) begin
-            flag = 1'b1;
-        end else begin
-            flag = 1'b0;
-        end
-    end
-
-    // Correcting the carry flag logic
-    always @(*) begin
-        if (aluc == ADD || aluc == ADDU) begin
-            carry = (res < a) ? 1'b1 : 1'b0;
-        end
-    end
-
+    assign r = res[31:0];
+    assign zero = (r == 32'b0);
+    assign carry = (aluc == ADD || aluc == ADDU || aluc == SUB || aluc == SUBU) ? res[32] : 1'b0;
+    assign overflow = (aluc == ADD) ? ((~a[31] & ~b[31] & r[31]) | (a[31] & b[31] & ~r[31])) :
+                       (aluc == SUB) ? ((a[31] & ~b[31] & ~r[31]) | (~a[31] & ~b[31] & r[31])) :
+                       1'b0;
+    assign negative = r[31];
+    assign flag = (aluc == SLT) ? (a < b) :
+                  (aluc == SLTU) ? ($unsigned(a) < $unsigned(b)) :
+                  1'b0;
 endmodule

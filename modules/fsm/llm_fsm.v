@@ -6,45 +6,44 @@ module fsm(
 );
 
     // State encoding
-    typedef enum reg [2:0] {
-        S0, // Initial state
-        S1, // Detected 1
-        S2, // Detected 10
-        S3, // Detected 100
-        S4  // Detected 1001
-    } state_t;
+    parameter s0 = 3'b000;
+    parameter s1 = 3'b001;
+    parameter s2 = 3'b010;
+    parameter s3 = 3'b011;
+    parameter s4 = 3'b100;
+    parameter s5 = 3'b101;
 
-    state_t current_state, next_state;
+    reg [2:0] ST_cr; // Current state
+    reg [2:0] ST_nt; // Next state
 
-    // State transition logic
+    // Combinational logic for next state
     always @(*) begin
-        case (current_state)
-            S0: next_state = (IN) ? S1 : S0;
-            S1: next_state = (IN) ? S1 : S2;
-            S2: next_state = (IN) ? S3 : S0;
-            S3: next_state = (IN) ? S4 : S0;
-            S4: next_state = (IN) ? S1 : S0;
-            default: next_state = S0;
+        case (ST_cr)
+            s0: ST_nt = (IN == 1'b0) ? s0 : s1;
+            s1: ST_nt = (IN == 1'b0) ? s2 : s1;
+            s2: ST_nt = (IN == 1'b0) ? s3 : s1;
+            s3: ST_nt = (IN == 1'b0) ? s0 : s4;
+            s4: ST_nt = (IN == 1'b0) ? s2 : s5;
+            s5: ST_nt = (IN == 1'b0) ? s2 : s1;
+            default: ST_nt = s0;
         endcase
     end
 
-    // State update on clock edge
+    // Sequential logic for current state
     always @(posedge CLK or posedge RST) begin
         if (RST) begin
-            current_state <= S0;
-            MATCH <= 0;
+            ST_cr <= s0;
         end else begin
-            current_state <= next_state;
-            // Set MATCH signal
-            if (current_state == S4 && IN) begin
-                MATCH <= 1;
-            end else if (current_state == S0) begin
-                MATCH <= 0;
-            end else if (current_state == S1 && IN) begin
-                MATCH <= 1; // Set MATCH when in state S1 and IN is 1
-            end else begin
-                MATCH <= 0; // Ensure MATCH is reset in other states
-            end
+            ST_cr <= ST_nt;
+        end
+    end
+
+    // Combinational logic for MATCH output
+    always @(*) begin
+        if (RST) begin
+            MATCH = 1'b0;
+        end else begin
+            MATCH = (ST_cr == s4 && IN == 1'b1) ? 1'b1 : 1'b0;
         end
     end
 
