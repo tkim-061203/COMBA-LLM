@@ -6,7 +6,7 @@ import datetime
 from scripts.langchain_groq_util import generate as llmGenerate
 from scripts.utils import md_code_extract, generateWorkFolderArgument, generateMEICWorkFolderArgument
 from scripts.constants import Commands, ModuleNamePrefix, Template
-from scripts.rag import ragCreate
+# from scripts.rag import ragCreate
 from scripts.codeAgent import LLMCodeAgent
 from scripts.MEICCodeAgent import MEICLLMCodeAgent
 
@@ -437,7 +437,7 @@ if __name__ == "__main__":
             makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
         case Commands.GENERATE.value:
             generate(args.modules)
-        case Commands.RAG.value:
-            ragCreate(args.ragfile)
+        # case Commands.RAG.value:
+        #     ragCreate(args.ragfile)
 
     print("your args", args)

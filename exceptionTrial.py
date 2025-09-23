@@ -29,16 +29,16 @@ moduleNormPaths = [os.path.normpath(modulePath) for modulePath in moduleGlobPath
 # In[22]:
 
 
-oldReportJSON = "report_gpt-4o-mini-2024-07-18.json"
-moduleReportJSONPaths = glob.glob('modules/*/reports/report_gpt-4o-mini-2024-07-18.json')
-expectedDescptionType = 'xml'
-moduleReportPaths = [os.path.relpath(os.path.join(reportJSONPath, '..')) for reportJSONPath in moduleReportJSONPaths]
-for reportPath in moduleReportPaths:
-    oldReportJSONPath = os.path.join(reportPath, oldReportJSON)
-    newReportJSONPath = os.path.join(reportPath, f'report_{llm_model}.{expectedDescptionType}.json')
-    if os.path.isfile(oldReportJSONPath) and (not os.path.isfile(newReportJSONPath)):
-        shutil.copyfile(oldReportJSONPath, newReportJSONPath)
-    # shutil.copyfile(f'{reportPath}/oldReportJSON')
+# oldReportJSON = "report_gpt-4o-mini-2024-07-18.json"
+# moduleReportJSONPaths = glob.glob(f'modules/*/reports/report_gpt-4o-mini-2024-07-18.json')
+# expectedDescptionType = 'xml'
+# moduleReportPaths = [os.path.relpath(os.path.join(reportJSONPath, '..')) for reportJSONPath in moduleReportJSONPaths]
+# for reportPath in moduleReportPaths:
+#     oldReportJSONPath = os.path.join(reportPath, oldReportJSON)
+#     newReportJSONPath = os.path.join(reportPath, f'report_{llm_model}.{expectedDescptionType}.json')
+#     if os.path.isfile(oldReportJSONPath) and (not os.path.isfile(newReportJSONPath)):
+#         shutil.copyfile(oldReportJSONPath, newReportJSONPath)
+#     # shutil.copyfile(f'{reportPath}/oldReportJSON')
 
 
 

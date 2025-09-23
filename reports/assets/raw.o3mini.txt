@@ -148,8 +148,8 @@
     "func_success": 3
   },
   "pe": {
-    "syntax_success": 0,
-    "func_success": 0
+    "syntax_success": 5,
+    "func_success": 5
   },
   "freq_divbyodd": {
     "syntax_success": 0,

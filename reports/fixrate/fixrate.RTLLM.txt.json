@@ -37,7 +37,7 @@
     },
     "div_8bit": {
         "syntax": 1.0,
-        "tb": 1.0
+        "tb": 0.0
     },
     "div_16bit": {
         "syntax": 1.0,
