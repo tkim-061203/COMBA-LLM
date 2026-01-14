@@ -54,7 +54,7 @@ myexit_str = """#define myexit(condition, content)   \\
     }"""
 
 fix_rate_result = {}
-descptionType = 'RTLLM.txt'
+descptionType = 'RTLLM.txt' # 'RTLLM.txt', 'xml'
 for moduleNormPath in moduleNormPaths:
     moduleName = os.path.basename(moduleNormPath)
     report_json_path = glob.glob(os.path.join(moduleNormPath, 'reports', f'*{llm_model}*{descptionType}.json'))

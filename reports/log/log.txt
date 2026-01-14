@@ -1,1 +1,1 @@
-### Log for module "multi_pipe_8bit"
+### Log for module "div_8bit"
