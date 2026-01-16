@@ -5,13 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "Python Debugger: Custom, Current File with Arguments",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "${command:pickArgs}"
-            ,"justMyCode": false
+            "args": ["rungeneric", "VE_code_completion/Prob123_bugs_addsubz", "--descriptiontype", "ve.txt", "--lintonly", "--nodebug", "--temperature", "0", "--samples", "1", "--examples", "0"],
+            "cwd": "${workspaceFolder}/.build_t0_n1"
         }
     ]
 }

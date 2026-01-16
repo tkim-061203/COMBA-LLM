@@ -13,7 +13,7 @@ RUN git clone --recurse-submodules https://github.com/YosysHQ/yosys.git \
     && make \
     && make install
 
-ENV PATH /opt/yosys/bin:$PATH
+ENV PATH=/opt/yosys/bin:$PATH
 
 RUN useradd -m yosys
 USER yosys

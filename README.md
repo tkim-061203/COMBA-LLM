@@ -1,3 +1,9 @@
+# Rework 4.0: VerilogEval Integration
+
+- Converter to Modules list.
+- GNU Project with autoreconf.
+- Generic LLM instance.
+
 # Rework 3.0: Langraph
 
 ## Limit

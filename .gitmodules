@@ -1,0 +1,3 @@
+[submodule "converter/verilog-eval"]
+	path = converter/verilog-eval
+	url = git@github.com:ngminhthanh12a3/verilog-eval.git

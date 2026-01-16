@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import argparse, os, shutil, typing, glob
+import argparse, os, shutil, typing, glob, sys
 import datetime
 from scripts.langchain_groq_util import generate as llmGenerate
 from scripts.utils import md_code_extract, generateWorkFolderArgument, generateMEICWorkFolderArgument
@@ -11,6 +11,10 @@ from scripts.codeAgent import LLMCodeAgent
 from scripts.MEICCodeAgent import MEICLLMCodeAgent
 
 from tqdm import tqdm
+
+srcDir = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.abspath(f"{srcDir}/scripts"))
+sys.path.insert(0, srcDir)
 
 parser = argparse.ArgumentParser(
     prog="LLM Prompt Template",
@@ -39,18 +43,30 @@ parser_runWork.add_argument(
 )
 
 #
-parser_runMEICWork = subparsers.add_parser(
-    Commands.RUNMEIC.value, help="Run projects with verilog module of MEIC"
+parser_runGenericWork = subparsers.add_parser(
+    Commands.RUNGENERIC.value, help="Run projects with verilog module in general"
 )
-parser_runMEICWork.add_argument("modules", nargs="*")
-parser_runMEICWork.add_argument(
+parser_runGenericWork.add_argument("modules", nargs="*")
+parser_runGenericWork.add_argument(
     "--llm", action="store_true", help="Run LLM Working Directory"
 )
-parser_runMEICWork.add_argument(
+parser_runGenericWork.add_argument(
     "--descriptiontype", default='xml', help="Description type", nargs='?', type=str
 )
-parser_runMEICWork.add_argument(
+parser_runGenericWork.add_argument(
     "--nodebug", action="store_true", help="No Debug with yes/no input"
+)
+parser_runGenericWork.add_argument(
+    "--moduletask", default='VE_code_completion', help="Module task", nargs='?', type=str
+)
+parser_runGenericWork.add_argument(
+    "--temperature", default=0, help="LLM temperature", type=float
+)
+parser_runGenericWork.add_argument(
+    "--samples", default=1, help="LLM Samples", type=int
+)
+parser_runGenericWork.add_argument(
+    "--examples", default=0, help="LLM examples", type=int
 )
 
 #
@@ -60,6 +76,9 @@ parser_makeWork = subparsers.add_parser(
 parser_makeWork.add_argument("modules", nargs="*")
 parser_makeWork.add_argument(
     "--llm", action="store_true", help="Make LLM Working Directory"
+)
+parser_runGenericWork.add_argument(
+    "--lintonly", action="store_true", help="Lint only"
 )
 
 parser_generate = subparsers.add_parser(
@@ -201,21 +220,21 @@ def makeWorkingFolder(
         moduleWorkPath = os.path.join(workFolderName, moduleName, f"{moduleName}.v")
         os.link(moduleSourcePath, moduleWorkPath)
 
-def makeMEICWorkingFolder(
+def makeGenericWorkingFolder(
     modulePaths: typing.List[str],
-    workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
+    # workFolderName=Template.TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.LLM.value,
     referenceModuleDir=Template.MODULEFOLDER.value,
 ):
 
-    if not os.path.isdir(workFolderName):
-        os.mkdir(workFolderName)
+    # if not os.path.isdir(workFolderName):
+    #     os.mkdir(workFolderName)
 
     for modulePath in modulePaths:
         moduleNormPath = os.path.normpath(modulePath)
         moduleName = os.path.basename(moduleNormPath)
 
-        moduleNameWorkPath = os.path.join(workFolderName, moduleName)
+        moduleNameWorkPath = moduleName
         referenceModuleNameWorkPath = os.path.join(referenceModuleDir, moduleName)
         
 
@@ -226,15 +245,12 @@ def makeMEICWorkingFolder(
         tbModuleFileName = Template.TBFILENAME.value.replace(".txt", ".cpp")
         tbModulePath = os.path.join(referenceModuleNameWorkPath, tbModuleFileName)
         tbWorkPath = os.path.join(moduleNameWorkPath, tbModuleFileName)
-        os.link(tbModulePath, tbWorkPath)
+        if os.path.isdir(tbModulePath):
+            os.link(tbModulePath, tbWorkPath)
 
-        moduleSourcePath = os.path.join(modulePath, f"{moduleNamePrefix}{moduleName}.v")
-        moduleWorkPath = os.path.join(workFolderName, moduleName, f"{moduleName}.v")
+        moduleWorkPath = os.path.join(moduleName, f"{moduleName}.v")
+        open(moduleWorkPath, 'w+').close()
 
-        if not os.path.isfile(moduleSourcePath):
-            open(moduleSourcePath, 'w+').close()
-
-        os.link(moduleSourcePath, moduleWorkPath)
 
 
 def generate(modulePaths: list):
@@ -345,17 +361,21 @@ def runFlow(
     history_tag = datetime.datetime.now().isoformat()
     shutil.copyfile('reports/log/log.txt', f'reports/log/.history/log_{llm_model}_{history_tag}.txt')
 
-def runMeicFlow(
+def runGenericFlow(
     modulePaths: typing.List[str],
     workFolderName=Template.MEIC_TEMPORARYWORKFOLDERNAME.value,
     moduleNamePrefix=ModuleNamePrefix.LLM.value,
     desciptionType='txt',
     nodebug=False,
     llm_model="gpt-4o-mini-2024-07-18",
+    moduleTask="VE_code_completion",
+    lintOnly=True,
+    temperature:float=0
 ):
+    moduleTaskAbsPath = os.path.join(srcDir, moduleTask)
     moduleGlobPaths = []
     for modulePath in modulePaths:
-        moduleGlobPaths += glob.glob(modulePath)
+        moduleGlobPaths += glob.glob(os.path.join(srcDir,modulePath))
 
     moduleNormPaths = [os.path.normpath(modulePath) for modulePath in moduleGlobPaths]
 
@@ -379,10 +399,11 @@ def runMeicFlow(
     #
     # log file
     # create file if not exist
-    if not os.path.isfile('reports/log/log_meic.txt'):
-        open('reports/log/log_meic.txt', 'w+').close()
+    os.makedirs('reports/log', exist_ok=True)
+    if not os.path.isfile('reports/log/log.txt'):
+        open('reports/log/log.txt', 'w+').close()
     # clear file
-    with open('reports/log/log_meic.txt', 'w+') as file:
+    with open('reports/log/log.txt', 'w+') as file:
         file.write('')
 
     for moduleNormPath in moduleNormPaths:
@@ -391,38 +412,35 @@ def runMeicFlow(
         moduleName = os.path.basename(moduleNormPath)
 
         #
-        # check if module is available in module path
-        if not os.path.isdir(os.path.join(Template.MODULEFOLDER.value, moduleName)):
-            print(f'MEIC module {moduleName} not found in refence module path.')
-            continue
-
-        #
         with open('reports/log/log.txt', 'a') as file:
             print(f"### Log for module \"{moduleName}\"", sep='\n', file=file)
         
-        makeMEICWorkingFolder([moduleNormPath], workFolderName, moduleNamePrefix)
+        makeGenericWorkingFolder([moduleNormPath], moduleNamePrefix, moduleTaskAbsPath)
 
         #
         print("flow here", moduleNormPath, moduleName)
         llmCodeAgent = MEICLLMCodeAgent(
+            srcDir=srcDir,
             modulePath=moduleNormPath,
-            workFolderName=workFolderName,
             llm_model=llm_model,
             model_provider="openai",
-            temperature=0,
             descriptionType=desciptionType,
-            customInputDirective=customInputDirective
+            customInputDirective=customInputDirective,
+            lintOnly=lintOnly,
+            moduleTaskAbsPath=moduleTaskAbsPath,
+            temperature=temperature
         )
         llmCodeAgent()
     
     # #
     # history log
     # mkdir if not exist
-    if not os.path.isdir('reports/log/.history'):
-        os.mkdir('reports/log/.history')
+    os.makedirs('reports/log/.history', exist_ok=True)
+    # if not os.path.isdir('reports/log/.history'):
+    #     os.mkdir('reports/log/.history')
     
     history_tag = datetime.datetime.now().isoformat()
-    shutil.copyfile('reports/log/log_meic.txt', f'reports/log/.history/log_meic_{llm_model}_{history_tag}.txt')
+    shutil.copyfile('reports/log/log.txt', f'reports/log/.history/log_{llm_model}_{history_tag}.txt')
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -431,8 +449,8 @@ if __name__ == "__main__":
             createmodule()
         case Commands.RUNWORK.value:
             runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype, args.nodebug)))
-        case Commands.RUNMEIC.value:
-            runMeicFlow(args.modules, desciptionType=args.descriptiontype, nodebug=args.nodebug)
+        case Commands.RUNGENERIC.value:
+            runGenericFlow(args.modules, desciptionType=args.descriptiontype, nodebug=args.nodebug, moduleTask=args.moduletask, lintOnly=args.lintonly, temperature=args.temperature)
         case Commands.MAKEWORK.value:
             makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
         case Commands.GENERATE.value:

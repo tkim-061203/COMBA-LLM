@@ -1,0 +1,6 @@
+QUIET=@
+src_dir      := @srcdir@
+
+default:
+	# echo ${src_dir}
+	python ${src_dir}/run.py

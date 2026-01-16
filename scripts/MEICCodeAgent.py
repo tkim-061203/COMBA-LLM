@@ -29,40 +29,13 @@ class CodeOutput(TypedDict):
     """Fixed/Generated Verilog Code and any description"""
 
     code: Annotated[str, ..., "The fixed/generated Verilog code"]
-    description: Annotated[
-        str,
-        ...,
-        "Any description. Description for the fixed/generate code, plan to fix/generate the code, ...",
-    ]
+    # description: Annotated[
+    #     str,
+    #     ...,
+    #     "Any description. Description for the fixed/generate code, plan to fix/generate the code, ...",
+    # ]
 
 
-# `json` output contain
-defaultCodeFixerTemplate = ChatPromptTemplate(
-    [
-        (
-            "system",
-            """Please act as a professional verilog code fixer.
-You are provided a Verilog Code with exceptions, such as Error or Warning from  A Verilog Compiler, called Verilator.
-You will fix Verilog code based on the exception content.
-But make sure that your fixing method must not violate any description in the <module /> tag content.
-Please provide `json` output containing the fixed Verilog code as a single module or module compositions that can be contruct in a Verilog file.
-
-For example:
-{{\"code\": \"module abc();
-endmodule
-\",
-\"description\": \"Any description ...\"}}
-
-""",
-        ),
-        # Means the template will receive an optional list of messages under
-        # the "conversation" key
-        ("placeholder", "{conversation}"),
-        # Equivalently:
-        # MessagesPlaceholder(variable_name="conversation", optional=True)
-        ("user", "{user_input}"),
-    ]
-)
 
 defaultCodeCorrecterTemplate = ChatPromptTemplate(
     [
@@ -95,7 +68,7 @@ defaultCodeGeneratorTemplate = ChatPromptTemplate(
         (
             "system",
             """Please act as a professional verilog code generator.
-Based on user requirement, you provide a Verilog Code for A Verilog Compiler, called Verilator.
+Based on user requirement, you provide a Verilog Code.
 Please provide `json` output containing the generated Verilog code as a single module or module compositions that can be contruct in a Verilog file.
 
 For example:
@@ -150,12 +123,14 @@ class MEICLLMCodeAgent:
     def __init__(
         self,
         modulePath: str,
+        srcDir:str,
+        moduleTaskAbsPath:str,
         llm_model: str = "qwen-2.5-coder-32b",
-        workFolderName: str = Template.TEMPORARYLLMWORKFOLDERNAME.value,
         model_provider: Literal['gpt-4o-mini-2024-07-18', "groq"] = "groq",
-        descriptionType: Literal['txt', 'xml'] = 'txt',
+        descriptionType: str = 'txt', # Literal['txt', 'xml', 've.txt],
         customInputDirective: dict = {
         },
+        lintOnly=True,
         **kwargs,
     ):
 
@@ -172,6 +147,26 @@ class MEICLLMCodeAgent:
         self._llm_code_fixer = self._llm.with_structured_output(
             CodeOutput, method="json_mode"
         )
+
+        with open(f'{srcDir}/template/codefixerprompt.{descriptionType}', 'r') as file:
+            codeFixerInstructionPrompt = file.read()
+
+        # `json` output contain
+        defaultCodeFixerTemplate = ChatPromptTemplate(
+            [
+                (
+                    "system",
+                    codeFixerInstructionPrompt,
+                ),
+                # Means the template will receive an optional list of messages under
+                # the "conversation" key
+                ("placeholder", "{conversation}"),
+                # Equivalently:
+                # MessagesPlaceholder(variable_name="conversation", optional=True)
+                ("user", "{user_input}"),
+            ]
+)
+
         self.code_fixer_chain = defaultCodeFixerTemplate | self._llm_code_fixer
 
         # LLM Code TB Correcter
@@ -210,24 +205,21 @@ class MEICLLMCodeAgent:
         self._graph = graph_builder.compile(checkpointer=memory)
 
         #
+        self._moduleName = os.path.basename(modulePath)
         self._modulePath = modulePath
-        self._workFolderName = workFolderName
-        self._moduleWorkPath = modulePathToModuleWorkPath(
-            self._modulePath, self._workFolderName
-        )
-        self._modulePathLint = os.path.join(self._moduleWorkPath, "lint")
-        self._modulePathDockerRun = os.path.join(self._moduleWorkPath, "docker_run")
+        self._workFolderName = self._moduleName
+        self._moduleWorkPath = os.path.split(os.path.relpath(self._workFolderName, srcDir))[0]
+        self._modulePathLint = os.path.join(self._moduleWorkPath, self._moduleName,"lint")
+        self._modulePathLintNoTB = os.path.join(self._moduleWorkPath, self._moduleName, "lintnotb")
+        self._modulePathDockerRun = os.path.join(self._moduleWorkPath, self._moduleName,"docker_run")
 
-        self._moduleName = os.path.basename(self._modulePath)
         self._modulePathBinMake = os.path.join(
-            self._moduleWorkPath, f"obj_dir/V{self._moduleName}"
+            self._moduleWorkPath, self._moduleName, f"obj_dir/V{self._moduleName}"
         )
-
-        self._last_print_type = None
 
         #
         # check Verilator Additional
-        self._verilator_warns = readFileContent("rag/verilator_warns.json")
+        self._verilator_warns = readFileContent(f"{srcDir}/rag/verilator_warns.json")
         self._verilator_warns: dict = ast.literal_eval(self._verilator_warns)
 
         #
@@ -237,6 +229,11 @@ class MEICLLMCodeAgent:
         #
         self._customInputDirective = customInputDirective
 
+        self._lintOnly = lintOnly
+
+        self._srcDir = srcDir
+
+        self._moduleTaskAbsPath = moduleTaskAbsPath
     @property
     def config(self):
         myconfig: RunnableConfig = {
@@ -247,8 +244,7 @@ class MEICLLMCodeAgent:
 
     @property
     def is_verified_flow(self):
-        if self._workFolderName == Template.TEMPORARYWORKFOLDERNAME.value:
-            return True
+
         return False
     
     def compilation_status(self, log:str, errorOnly=True):
@@ -307,17 +303,20 @@ class MEICLLMCodeAgent:
         }
 
         #
-        curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
+        curCodeFilePath = getTemplateFilenamePath(self._moduleName)
         codeOutputDict = state["generated_code"]
         saveFileContent(curCodeFilePath, codeOutputDict["code"])
+
+        compilationDir = self._modulePathLintNoTB if self._lintOnly else self._modulePathLint
 
         compilationCpltProcess = subprocess.run(
             [
                 "make",
-                self._modulePathLint,
-                f"WORKDIR={self._workFolderName}",
+                compilationDir,
+                f"WORKDIR={self._moduleWorkPath}",
             ],
             stdout=subprocess.PIPE,
+            cwd=self._srcDir,
         )
 
         resultSTDOUTUTF8 = compilationCpltProcess.stdout.decode("utf8")
@@ -462,23 +461,28 @@ Here is the related in-line content with the {exceptionType}:
             'tbLimitTrials': [],
         }
 
-        #
-        # tb check
-        if not self.tb_syntax_is_correct:
-            interrupt("TB Syntax is incorrect!")
 
         # testbench
-        tbCpltProcess = subprocess.run(
-            [
-                "make",
-                self._modulePathDockerRun,
-                f"WORKDIR={self._workFolderName}",
-            ],
-            stdout=subprocess.PIPE,
-        )
+        if not self._lintOnly:
+            #
+            # tb check
+            if not self.tb_syntax_is_correct:
+                interrupt("TB Syntax is incorrect!")
+            
+            tbCpltProcess = subprocess.run(
+                [
+                    "make",
+                    self._modulePathDockerRun,
+                    f"WORKDIR={self._workFolderName}",
+                ],
+                stdout=subprocess.PIPE,
+            )
 
-        resultSTDOUTUTF8 = tbCpltProcess.stdout.decode("utf8")
-        tbStatusSuccess = tbCpltProcess.returncode == 0
+            resultSTDOUTUTF8 = tbCpltProcess.stdout.decode("utf8")
+            tbStatusSuccess = tbCpltProcess.returncode == 0
+        else:
+            resultSTDOUTUTF8 = ""
+            tbStatusSuccess = True
         additionRetState['tbStatusSuccess'] = tbStatusSuccess
 
         #
@@ -523,7 +527,7 @@ Find out related signals mismatchs with the expected outputs. If mismatched and 
         )
             if "tb_failed" not in state['exceptionTitleAdditionContent']:
                 tb_codeFilePath = getTemplateFilenamePath(
-                    self._moduleWorkPath, "cpp", "tb"
+                    os.path.join(self._moduleWorkPath, self._moduleName), "cpp", "tb"
                 )
                 tb_code = readFileContent(tb_codeFilePath)
                 additionRetState[
@@ -712,8 +716,12 @@ Here are the content of the testbench code of the Verilog module:
             "n" if self.is_verified_flow else self.customInput("Generate new code?", "chatbot_code_generator")
         )
         if generate_new_code == "n":
-            curCodeFilePath = getTemplateFilenamePath(self._moduleWorkPath)
-            code = readFileContent(curCodeFilePath)
+            try:
+                curCodeFilePath = getTemplateFilenamePath(os.path.join(self._moduleTaskAbsPath, self._moduleName))
+                code = readFileContent(curCodeFilePath)
+            except:
+                curCodeFilePath = getTemplateFilenamePath(self._modulePath, fname=f"verified_{self._moduleName}")
+                code = readFileContent(curCodeFilePath)
             content = {"code": code}
             conver_human_mess = HumanMessage(content=state["user_input"])
             conver_ai_mess = AIMessage(content=json.dumps(content))
@@ -823,11 +831,9 @@ Here are the content of the testbench code of the Verilog module:
         ):
             print("End Agent with Iteration trial: ", self._iteration_time)
             raise StopIteration
-
+        self._examples
         # description
-        description = readFileContent(
-            os.path.join(self._modulePath, Template.DESCRIPTIONFILENAME.value if self._descriptionType == 'txt' else Template.DESCRIPTIONXMLFILENAME.value)
-        )
+        description = readFileContent(os.path.join(self._modulePath, f"design_description.{self._descriptionType}"))
 
         if self._descriptionType == 'xml':
             xmlDescriptionIsValid, formattedXMLDescription = self.checkXMLDescription(description)
@@ -879,7 +885,7 @@ Here are the content of the testbench code of the Verilog module:
         # self._graph.update_state(self._config, {"exception": {"test": "ok"}})
 
         self._iteration_time = 0
-        self._iteration_time_limit = 4 if not self.is_verified_flow else 1
+        self._iteration_time_limit = self._samples - 1
 
         self.status = "error"
         self._tqdm = {
@@ -887,8 +893,12 @@ Here are the content of the testbench code of the Verilog module:
         }
         return self
 
-    def __call__(self):
+    def __call__(self, samples=5, examples=0):
         print("Start agent")
+
+        self._samples = samples
+        self._examples = examples
+
         myiter = iter(self)
 
         # generate first shoot
@@ -907,9 +917,10 @@ Here are the content of the testbench code of the Verilog module:
 
         if not self.is_verified_flow:
             #
-            cur_report_path = os.path.join(self._modulePath, "reports")
-            if not os.path.isdir(cur_report_path):
-                os.mkdir(cur_report_path)
+            cur_report_path = os.path.join(self._moduleName, "reports")
+            os.makedirs(cur_report_path, exist_ok=True)
+            # if not os.path.isdir(cur_report_path):
+            #     os.mkdir(cur_report_path)
             # save report.json
             with open(
                 os.path.join(cur_report_path, f"report_{self._llm_model}.json"), "w"
@@ -919,9 +930,10 @@ Here are the content of the testbench code of the Verilog module:
             # save report history
             history_tag = datetime.datetime.now().isoformat()
             # history path
-            cur_history_path = os.path.join(self._modulePath, ".history")
-            if not os.path.isdir(cur_history_path):
-                os.mkdir(cur_history_path)
+            cur_history_path = os.path.join(self._moduleName, ".history")
+            os.makedirs(cur_history_path, exist_ok=True)
+            # if not os.path.isdir(cur_history_path):
+            #     os.mkdir(cur_history_path)
             with open(
                 os.path.join(
                     cur_history_path, f"report_{self._llm_model}_{history_tag}.json"

@@ -26,7 +26,7 @@ class Commands(Enum):
     MAKEVERIFIED = "makeverified"
     GENERATE = "generate"
     RUNWORK = "run"
-    RUNMEIC = "runmeic"
+    RUNGENERIC = "rungeneric"
     MAKEWORK = "makework"
     RAG = "rag"
 
