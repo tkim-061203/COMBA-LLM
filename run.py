@@ -1,3 +1,4 @@
+from multiprocessing import Pool
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -11,6 +12,14 @@ from scripts.codeAgent import LLMCodeAgent
 from scripts.MEICCodeAgent import MEICLLMCodeAgent
 
 from tqdm import tqdm
+
+from langchain_core.rate_limiters import InMemoryRateLimiter
+
+rate_limiter = InMemoryRateLimiter(
+    requests_per_second=1.6,  # <-- Can only make a request once every 10 seconds!!
+    check_every_n_seconds=0.1,  # Wake up every 100 ms to check whether allowed to make a request,
+    max_bucket_size=10000,  # Controls the maximum burst size.
+)
 
 srcDir = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, os.path.abspath(f"{srcDir}/scripts"))
@@ -370,10 +379,13 @@ def runGenericFlow(
     llm_model="gpt-4o-mini-2024-07-18",
     moduleTask="VE_code_completion",
     lintOnly=True,
-    temperature:float=0
+    temperature:float=0,
+    examples=0,
+    samples=1
 ):
     moduleTaskAbsPath = os.path.join(srcDir, moduleTask)
     moduleGlobPaths = []
+    
     for modulePath in modulePaths:
         moduleGlobPaths += glob.glob(os.path.join(srcDir,modulePath))
 
@@ -394,7 +406,7 @@ def runGenericFlow(
         "__next__": defaultInputDirYAll
     } if nodebug else {}
 
-    moduletqdm = tqdm(total=len(moduleGlobPaths), desc='Module')
+    # moduletqdm = tqdm(total=len(moduleGlobPaths), desc='Module')
 
     #
     # log file
@@ -406,9 +418,11 @@ def runGenericFlow(
     with open('reports/log/log.txt', 'w+') as file:
         file.write('')
 
-    for moduleNormPath in moduleNormPaths:
+    # for moduleNormPath in moduleNormPaths:
+    global do_process
+    def do_process(moduleNormPath):
 
-        moduletqdm.update(1)
+        # moduletqdm.update(1)
         moduleName = os.path.basename(moduleNormPath)
 
         #
@@ -428,10 +442,18 @@ def runGenericFlow(
             customInputDirective=customInputDirective,
             lintOnly=lintOnly,
             moduleTaskAbsPath=moduleTaskAbsPath,
-            temperature=temperature
+            temperature=temperature,
+            examples=examples,
+            rate_limiter=rate_limiter
         )
-        llmCodeAgent()
+        llmCodeAgent(samples=samples)
     
+    num_core = int(os.cpu_count() - 4)
+    my_range = moduleNormPaths
+    with Pool(processes=num_core) as pool:
+        for i in tqdm(iterable=pool.imap_unordered(do_process, my_range), total=len(my_range)):
+            pass
+
     # #
     # history log
     # mkdir if not exist
@@ -450,7 +472,14 @@ if __name__ == "__main__":
         case Commands.RUNWORK.value:
             runFlow(args.modules, *(generateWorkFolderArgument(args.llm) + (args.descriptiontype, args.nodebug)))
         case Commands.RUNGENERIC.value:
-            runGenericFlow(args.modules, desciptionType=args.descriptiontype, nodebug=args.nodebug, moduleTask=args.moduletask, lintOnly=args.lintonly, temperature=args.temperature)
+            runGenericFlow(args.modules,
+                           desciptionType=args.descriptiontype,
+                           nodebug=args.nodebug,
+                           moduleTask=args.moduletask,
+                           lintOnly=args.lintonly,
+                           temperature=args.temperature,
+                           samples=args.samples,
+                           examples=args.examples)
         case Commands.MAKEWORK.value:
             makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
         case Commands.GENERATE.value:

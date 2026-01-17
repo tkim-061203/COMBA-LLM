@@ -26,7 +26,7 @@ from .xmlDescription import Module, Modules
 from tqdm import tqdm
 
 class CodeOutput(TypedDict):
-    """Fixed/Generated Verilog Code and any description"""
+    """Fixed/Generated Verilog Code"""
 
     code: Annotated[str, ..., "The fixed/generated Verilog code"]
     # description: Annotated[
@@ -57,27 +57,6 @@ endmodule
         # Means the template will receive an optional list of messages under
         # the "conversation" key
         ("placeholder", "{conversation}"),
-        # Equivalently:
-        # MessagesPlaceholder(variable_name="conversation", optional=True)
-        ("user", "{user_input}"),
-    ]
-)
-
-defaultCodeGeneratorTemplate = ChatPromptTemplate(
-    [
-        (
-            "system",
-            """Please act as a professional verilog code generator.
-Based on user requirement, you provide a Verilog Code.
-Please provide `json` output containing the generated Verilog code as a single module or module compositions that can be contruct in a Verilog file.
-
-For example:
-{{\"code\": \"module abc();
-endmodule
-\",
-\"description\": \"Any description ...\"}}
-""",
-        ),
         # Equivalently:
         # MessagesPlaceholder(variable_name="conversation", optional=True)
         ("user", "{user_input}"),
@@ -131,6 +110,7 @@ class MEICLLMCodeAgent:
         customInputDirective: dict = {
         },
         lintOnly=True,
+        examples=0,
         **kwargs,
     ):
 
@@ -142,7 +122,6 @@ class MEICLLMCodeAgent:
         self._llm = init_chat_model(
             llm_model, model_provider=self._model_provider, **kwargs
         )
-
         # LLM Code Fixer
         self._llm_code_fixer = self._llm.with_structured_output(
             CodeOutput, method="json_mode"
@@ -178,13 +157,41 @@ class MEICLLMCodeAgent:
         )
 
         self._llm_code_generator = self._llm.with_structured_output(
-            CodeOutput, method="json_mode"
+            CodeOutput, method="json_mode", include_raw=True
         )
+        examples_tuples = []
 
+        for i in range(examples):
+            with open(f'{srcDir}/template/codegenerator_ex{i}_prompt.{descriptionType}.json', "r") as file:
+                example_dict = ast.literal_eval(file.read())
+                examples_tuples.append(("user", example_dict["instruction"]))
+                examples_tuples.append(("assistant", f"{{{{\"code\": \"{example_dict["response"]}\"}}}}"))
+
+        codeGeneratorChainArray = [
+                (
+                    "system",
+                    """Please act as a professional verilog code generator.
+Based on user requirement, you provide a Verilog Code.
+Please provide `json` output containing the generated Verilog code as a single module or module compositions that can be contruct in a Verilog file.
+Only generate the code, do not provide any description.
+
+For example:
+{{\"code\": \"module abc();
+endmodule
+\"}}
+""",
+                ),
+            ] +      examples_tuples +   [
+                # Equivalently:
+                # MessagesPlaceholder(variable_name="conversation", optional=True)
+                ("user", "{user_input}"),
+            ]
+        defaultCodeGeneratorTemplate = ChatPromptTemplate(
+            codeGeneratorChainArray
+        )
         self.code_generator_chain = (
             defaultCodeGeneratorTemplate | self._llm_code_generator
         )
-
         graph_builder = StateGraph(State)
 
         graph_builder.add_node("code_generator", self.chatbot_code_generator)
@@ -234,6 +241,8 @@ class MEICLLMCodeAgent:
         self._srcDir = srcDir
 
         self._moduleTaskAbsPath = moduleTaskAbsPath
+
+        
     @property
     def config(self):
         myconfig: RunnableConfig = {
@@ -745,6 +754,9 @@ Here are the content of the testbench code of the Verilog module:
                         "user_input": state["user_input"],
                     }
                 )
+                if "parsed" in invokeResult:
+                    # if invokeResult['parsing_error'] != None:
+                    invokeResult = invokeResult['parsed']
                 break
             except:
                 print("Chat bot trial:", i)
@@ -825,13 +837,13 @@ Here are the content of the testbench code of the Verilog module:
 
         return userInput[0]
     def __next__(self):
-        confirm = self.customInput("##### Trial: " + str(self._iteration_time) + ". Next?", "__next__")
+        confirm = self.customInput("##### Trial: " + str(self._iteration_time) + "/" + str(self._iteration_time_limit) + ". Next?", "__next__")
         if (confirm == "n" or confirm == "N") or (
             self._iteration_time > self._iteration_time_limit
         ):
             print("End Agent with Iteration trial: ", self._iteration_time)
             raise StopIteration
-        self._examples
+
         # description
         description = readFileContent(os.path.join(self._modulePath, f"design_description.{self._descriptionType}"))
 

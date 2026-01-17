@@ -26,6 +26,38 @@ m4_define( proj_version, [0.0.0])
 AC_INIT(proj_name,proj_version,proj_maintainer,proj_abbreviation)
 AC_CONFIG_SRCDIR([run.py])
 
+AC_ARG_WITH(temperature,
+  AS_HELP_STRING([--with-temperature],[Temperature]),
+  [temperature="${with_temperature}"],
+  [temperature="0.85"])
+
+AC_SUBST([temperature])
+AC_MSG_NOTICE([using temperature: ${temperature}])
+
+#-------------------------------------------------------------------------
+# --with-samples
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(samples,
+  AS_HELP_STRING([--with-samples],[Number of samples for each problem]),
+  [samples="${with_samples}"],
+  [samples="1"])
+
+AC_SUBST([samples])
+AC_MSG_NOTICE([using samples: ${samples}])
+
+#-------------------------------------------------------------------------
+# --with-examples
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(examples,
+  AS_HELP_STRING([--with-examples],[Number of examples for ICL context]),
+  [examples="${with_examples}"],
+  [examples="0"])
+
+AC_SUBST([examples])
+AC_MSG_NOTICE([using examples: ${examples}])
+
 #-------------------------------------------------------------------------
 # Output
 #-------------------------------------------------------------------------

@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["rungeneric", "VE_code_completion/Prob123_bugs_addsubz", "--descriptiontype", "ve.txt", "--lintonly", "--nodebug", "--temperature", "0", "--samples", "1", "--examples", "0"],
+            "args": ["rungeneric", "VE_code_completion/Prob123_bugs_addsubz", "--descriptiontype", "ve.txt", "--lintonly", "--nodebug", "--temperature", "0", "--samples", "1", "--examples", "1"],
             "cwd": "${workspaceFolder}/.build_t0_n1"
         }
     ]
