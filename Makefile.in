@@ -1,6 +1,19 @@
 QUIET=@
 src_dir      := @srcdir@
 
+
+ifeq (@generatecodeonly@,)
+generatecodeonly=
+else
+generatecodeonly=--generatecodeonly
+endif
+
+
 default:
 	# echo ${src_dir}
-	python ${src_dir}/run.py rungeneric "VE_code_completion/*" --descriptiontype ve.txt --lintonly --nodebug --temperature @temperature@ --samples @samples@ --examples @examples@
+	python ${src_dir}/run.py rungeneric "VE_code_completion/*" --descriptiontype ve.txt --lintonly --nodebug --temperature @temperature@ --samples @samples@ --examples @examples@ ${generatecodeonly}
+
+ve-translate:
+	cp config.log config.log.old
+	python ${src_dir}/converter/ve_translation.py gpt-4o-mini-2024-07-18
+	${src_dir}/converter/verilog-eval/configure --with-model=@model@ --with-task=@task@ --with-samples=@samples@ --with-examples=0 --with-model-manual=@model_manual@

@@ -77,6 +77,9 @@ parser_runGenericWork.add_argument(
 parser_runGenericWork.add_argument(
     "--examples", default=0, help="LLM examples", type=int
 )
+parser_runGenericWork.add_argument(
+    "--generatecodeonly", action="store_true", help="Generate code only, no post processing"
+)
 
 #
 parser_makeWork = subparsers.add_parser(
@@ -381,7 +384,8 @@ def runGenericFlow(
     lintOnly=True,
     temperature:float=0,
     examples=0,
-    samples=1
+    samples=1,
+    generateCodeOnly=False
 ):
     moduleTaskAbsPath = os.path.join(srcDir, moduleTask)
     moduleGlobPaths = []
@@ -444,11 +448,12 @@ def runGenericFlow(
             moduleTaskAbsPath=moduleTaskAbsPath,
             temperature=temperature,
             examples=examples,
-            rate_limiter=rate_limiter
+            rate_limiter=rate_limiter,
+            generateCodeOnly=generateCodeOnly
         )
         llmCodeAgent(samples=samples)
     
-    num_core = int(os.cpu_count() - 4)
+    num_core = 1# int(os.cpu_count() / 2)
     my_range = moduleNormPaths
     with Pool(processes=num_core) as pool:
         for i in tqdm(iterable=pool.imap_unordered(do_process, my_range), total=len(my_range)):
@@ -479,7 +484,8 @@ if __name__ == "__main__":
                            lintOnly=args.lintonly,
                            temperature=args.temperature,
                            samples=args.samples,
-                           examples=args.examples)
+                           examples=args.examples,
+                           generateCodeOnly=args.generatecodeonly)
         case Commands.MAKEWORK.value:
             makeWorkingFolder(args.modules, *generateWorkFolderArgument(args.llm))
         case Commands.GENERATE.value:

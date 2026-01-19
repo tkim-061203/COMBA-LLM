@@ -618,6 +618,10 @@ PACKAGE_URL=''
 ac_unique_file="run.py"
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+generatecodeonly
+task
+model_manual
+model
 examples
 samples
 temperature
@@ -666,6 +670,10 @@ enable_option_checking
 with_temperature
 with_samples
 with_examples
+with_model
+with_model_manual
+with_task
+with_generatecodeonly
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1290,6 +1298,11 @@ Optional Packages:
   --with-temperature      Temperature
   --with-samples          Number of samples for each problem
   --with-examples         Number of examples for ICL context
+  --with-model            Large language model to use
+  --with-model-manual     Base URL of model
+  --with-task             Task to execute: spec-to-rtl or
+                          code-complete-iccad2023
+  --with-generatecodeonly Generate code only, no post-prosessing
 
 Report bugs to <Vu-Minh-Thanh Nguyen nvmthanh@hcmus.edu.vn>.
 _ACEOF
@@ -1783,6 +1796,78 @@ fi
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: using examples: ${examples}" >&5
 printf "%s\n" "$as_me: using examples: ${examples}" >&6;}
+
+#-------------------------------------------------------------------------
+# --with-model
+#-------------------------------------------------------------------------
+
+
+# Check whether --with-model was given.
+if test ${with_model+y}
+then :
+  withval=$with_model; model="${with_model}"
+else $as_nop
+  model="manual_Mistral_7B"
+fi
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: using model: ${model}" >&5
+printf "%s\n" "$as_me: using model: ${model}" >&6;}
+
+#-------------------------------------------------------------------------
+# --with-model-manual
+#-------------------------------------------------------------------------
+
+
+# Check whether --with-model-manual was given.
+if test ${with_model_manual+y}
+then :
+  withval=$with_model_manual; model_manual="${with_model_manual}"
+else $as_nop
+  model_manual=True
+fi
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: using model-manual: ${model_manual}" >&5
+printf "%s\n" "$as_me: using model-manual: ${model_manual}" >&6;}
+
+#-------------------------------------------------------------------------
+# --with-task
+#-------------------------------------------------------------------------
+
+
+# Check whether --with-task was given.
+if test ${with_task+y}
+then :
+  withval=$with_task; task="${with_task}"
+else $as_nop
+  task="code-complete-iccad2023"
+fi
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: using task: ${task}" >&5
+printf "%s\n" "$as_me: using task: ${task}" >&6;}
+
+#-------------------------------------------------------------------------
+# --with-model-manual
+#-------------------------------------------------------------------------
+
+
+# Check whether --with-generatecodeonly was given.
+if test ${with_generatecodeonly+y}
+then :
+  withval=$with_generatecodeonly; generatecodeonly="True"
+else $as_nop
+  generatecodeonly=""
+fi
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: using generatecodeonly: ${generatecodeonly}" >&5
+printf "%s\n" "$as_me: using generatecodeonly: ${generatecodeonly}" >&6;}
 
 #-------------------------------------------------------------------------
 # Output

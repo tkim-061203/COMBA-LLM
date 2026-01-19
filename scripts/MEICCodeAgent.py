@@ -97,7 +97,6 @@ class State(TypedDict):
     syntaxLimitReach: dict
     errorOnlyCompilation: bool
 
-
 class MEICLLMCodeAgent:
     def __init__(
         self,
@@ -111,6 +110,7 @@ class MEICLLMCodeAgent:
         },
         lintOnly=True,
         examples=0,
+        generateCodeOnly=False,
         **kwargs,
     ):
 
@@ -200,7 +200,8 @@ endmodule
         graph_builder.add_node("tb_simulation", self.tb_simulation)
 
         graph_builder.add_edge(START, "code_generator")
-        graph_builder.add_edge("code_generator", "syntax_compile")
+        graph_builder.add_conditional_edges("code_generator", self.code_generator_rout)
+        # graph_builder.add_edge("code_generator", "syntax_compile")
         graph_builder.add_edge("code_fixer", "syntax_compile")
         graph_builder.add_conditional_edges("syntax_compile", self.syntax_compile_route)
         graph_builder.add_conditional_edges("tb_simulation", self.tb_simulation_route)
@@ -241,7 +242,7 @@ endmodule
         self._srcDir = srcDir
 
         self._moduleTaskAbsPath = moduleTaskAbsPath
-
+        self._generateCodeOnly = generateCodeOnly
         
     @property
     def config(self):
@@ -778,6 +779,12 @@ Here are the content of the testbench code of the Verilog module:
             ],
             "generated_code": invokeResult,
         }
+    def code_generator_rout(self, state:State):
+
+        if self._generateCodeOnly:
+            return END
+        
+        return "syntax_compile"
     def checkXMLDescription(self, description:str):
 
         #

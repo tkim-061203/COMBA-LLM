@@ -59,6 +59,54 @@ AC_SUBST([examples])
 AC_MSG_NOTICE([using examples: ${examples}])
 
 #-------------------------------------------------------------------------
+# --with-model
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(model,
+  AS_HELP_STRING([--with-model],[Large language model to use]),
+  [model="${with_model}"],
+  [model="manual_Mistral_7B"])
+
+AC_SUBST([model])
+AC_MSG_NOTICE([using model: ${model}])
+
+#-------------------------------------------------------------------------
+# --with-model-manual 
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(model-manual,
+  AS_HELP_STRING([--with-model-manual],[Base URL of model]),
+  [model_manual="${with_model_manual}"],
+  [model_manual=True])
+
+AC_SUBST([model_manual])
+AC_MSG_NOTICE([using model-manual: ${model_manual}])
+
+#-------------------------------------------------------------------------
+# --with-task
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(task,
+  AS_HELP_STRING([--with-task],[Task to execute: spec-to-rtl or code-complete-iccad2023]),
+  [task="${with_task}"],
+  [task="code-complete-iccad2023"])
+
+AC_SUBST([task])
+AC_MSG_NOTICE([using task: ${task}])
+
+#-------------------------------------------------------------------------
+# --with-model-manual 
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(generatecodeonly,
+  AS_HELP_STRING([--with-generatecodeonly],[Generate code only, no post-prosessing]),
+  [generatecodeonly="True"],
+  [generatecodeonly=""])
+
+AC_SUBST([generatecodeonly])
+AC_MSG_NOTICE([using generatecodeonly: ${generatecodeonly}])
+
+#-------------------------------------------------------------------------
 # Output
 #-------------------------------------------------------------------------
 
