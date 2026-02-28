@@ -1,6 +1,7 @@
-name: try20
+name: comba-llm
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - _libgcc_mutex=0.1=main
   - _openmp_mutex=5.1=1_gnu
@@ -82,4 +83,16 @@ dependencies:
       - urllib3==2.3.0
       - yarl==1.18.3
       - zstandard==0.23.0
+      # ── COMBA-LLM additions ──
+      - vllm
+      - openai
+      - langgraph
+      - torch
+      - transformers
+      - peft
+      - accelerate
+      - safetensors
+      - fastapi
+      - uvicorn
+      - tqdm
 prefix: /home/desiot/anaconda3/envs/try20

@@ -28,7 +28,8 @@ PORT_DBG=8001     # Debugger port
 MAX_MODEL_LEN=16384  # 16K context — Verilog code dài
 GPU_MEM=0.92      # 92% of 48GB = ~44GB usable
 DTYPE="bfloat16"
-MAX_LORA_RANK=64
+MAX_LORA_RANK=512
+CACHE_DIR="../hf_model_cache"
 LOG_DIR="./logs"
 
 # ── Parse Args ──
@@ -118,6 +119,7 @@ single_instance() {
     
     CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
         --model $BASE_MODEL \
+        --download-dir $CACHE_DIR \
         --served-model-name qwen-base \
         --enable-lora \
         --lora-modules debugger=$ADAPTER_PATH \
@@ -158,6 +160,7 @@ start_dual() {
     echo "🔵 Starting Generator on GPU 0 (port $PORT_GEN)..."
     CUDA_VISIBLE_DEVICES=0 nohup python -m vllm.entrypoints.openai.api_server \
         --model $BASE_MODEL \
+        --download-dir $CACHE_DIR \
         --served-model-name qwen-base \
         --dtype $DTYPE \
         --max-model-len $MAX_MODEL_LEN \
@@ -174,6 +177,7 @@ start_dual() {
     echo "🔴 Starting Debugger on GPU 1 (port $PORT_DBG)..."
     CUDA_VISIBLE_DEVICES=1 nohup python -m vllm.entrypoints.openai.api_server \
         --model $BASE_MODEL \
+        --download-dir $CACHE_DIR \
         --served-model-name qwen-base \
         --enable-lora \
         --lora-modules debugger=$ADAPTER_PATH \
