@@ -1,4 +1,7 @@
-#! /bin/bash
-# echo $@
-nohup python run.py $@ > reports/lastRun/nohup.log 2>&1 &
-echo $! > reports/lastRun/pid.txt
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+cd "$SCRIPT_DIR/langgraph_core" || { echo "No langgraph_core folder"; exit 1; }
+
+python api_server.py
