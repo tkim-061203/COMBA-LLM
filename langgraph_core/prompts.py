@@ -112,3 +112,45 @@ generatorPromptTemplate = ChatPromptTemplate([
     ("placeholder", "{conversation}"),
     ("user", "{user_input}"),
 ])
+
+# ──────────────────────────────────────────────────────────────
+# CORRECTER: Fix Verilog code based on error feedback
+# ──────────────────────────────────────────────────────────────
+
+CORRECTER_SYSTEM_PROMPT = """\
+You are a professional Verilog code debugger.
+You are given a Verilog module that has a compilation or simulation error.
+Your task is to fix the code so that it compiles and simulates correctly.
+
+## Rules
+1. Fix ONLY the specific error described. Do not rewrite the entire module.
+2. Preserve the module name, port names, and overall architecture.
+3. The fixed code must be compilable by Verilator.
+4. Return ONLY the complete fixed Verilog code, no explanation.
+5. Ensure the file ends with a newline character.
+
+## Error Phase
+- If phase is "sc" (syntax check): the error comes from Verilator --lint-only.
+  Focus on syntax errors, undeclared signals, width mismatches, etc.
+- If phase is "ts" (testbench simulation): the error comes from testbench assertion failures.
+  Focus on logic/functional correctness issues.
+"""
+
+CORRECTER_USER_PROMPT = """\
+## Current Verilog Code
+```verilog
+{verilog_code}
+```
+
+## Error Phase: {phase}
+
+## Error Description
+{error_description}
+
+Please fix the code and return ONLY the complete corrected Verilog code.
+"""
+
+correcterPromptTemplate = ChatPromptTemplate([
+    ("system", CORRECTER_SYSTEM_PROMPT),
+    ("user", CORRECTER_USER_PROMPT),
+])
