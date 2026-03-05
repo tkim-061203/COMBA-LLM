@@ -140,6 +140,13 @@ class TestRoutingFunctions:
         state["total_iter"] = MAX_TOTAL_ITER
         assert route_after_patcher(state) == "end_max_iter"
 
+    def test_route_after_ted_syntax_no_exception(self):
+        """When TED finds no parseable error, route to TB instead of debugger."""
+        state = make_initial_state()
+        state["sc_exception"] = None
+        state["sc_trial"] = 3
+        assert route_after_ted_syntax(state) == "node_tb_sim"
+
 
 # ──────────────────────────────────────────────────────────────
 # Test 2: Individual node tests

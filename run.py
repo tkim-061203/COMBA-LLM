@@ -527,144 +527,16 @@ def runLangGraphFlow(
 ):
     """
     Run the full COMBA v2 pipeline (LangGraph) on each module.
-
-    For each module in modulePaths:
-      1. Read design_description.{xml|txt}
-      2. Build initial COMBAState
-      3. Run build_comba_graph(llm).invoke(state)
-      4. Save JSON report to modules/{name}/reports/
+    Delegates to pipeline_runner.run_pipeline_batch().
     """
-    import re as _re
     sys.path.insert(0, os.path.join(srcDir, "langgraph_core"))
-    from comba_pipeline import build_comba_graph, make_initial_state
-    from llm_interface import COMBALlm
+    from pipeline_runner import run_pipeline_batch
 
-    # Init LLM and graph once
-    llm = COMBALlm.from_env()
-    graph = build_comba_graph(llm)
-    print(f"[LangGraph] Pipeline ready: {llm}")
-
-    moduleGlobPaths = []
-    for modulePath in modulePaths:
-        moduleGlobPaths += glob.glob(modulePath)
-
-    moduleNormPaths = [os.path.normpath(mp) for mp in moduleGlobPaths]
-    total = len(moduleNormPaths)
-    print(f"[LangGraph] Running {total} modules × {samples} sample(s)")
-
-    all_results = {}
-
-    for idx, moduleNormPath in enumerate(moduleNormPaths, 1):
-        moduleName = os.path.basename(moduleNormPath)
-        print(f"\n{'═' * 60}")
-        print(f"  [{idx}/{total}] Module: {moduleName}")
-        print(f"{'═' * 60}")
-
-        # Read description
-        if descriptionType == "xml":
-            desc_file = os.path.join(moduleNormPath, "design_description.xml")
-        elif descriptionType == "txt":
-            desc_file = os.path.join(moduleNormPath, "design_description.txt")
-        else:
-            # e.g., "RTLLM.txt" → "design_description.RTLLM.txt"
-            desc_file = os.path.join(moduleNormPath, f"design_description.{descriptionType}")
-
-        if not os.path.isfile(desc_file):
-            print(f"  ⚠️ Description file not found: {desc_file}, skipping")
-            continue
-
-        with open(desc_file, "r", encoding="utf-8") as f:
-            description = f.read()
-
-        sample_results = []
-
-        for sample_idx in range(1, samples + 1):
-            if samples > 1:
-                print(f"  ── Sample {sample_idx}/{samples} ──")
-
-            # Build initial state
-            state = make_initial_state(nl_input=description, module_name=moduleName)
-
-            # If XML description, skip converter
-            if descriptionType == "xml":
-                state["xml_description"] = description
-
-            # Run pipeline
-            try:
-                config = {"recursion_limit": 100}
-                final = graph.invoke(state, config)
-
-                result = {
-                    "module_name": moduleName,
-                    "description_type": descriptionType,
-                    "final_status": final.get("final_status", "unknown"),
-                    "sc_trial": final.get("sc_trial", 0),
-                    "ts_trial": final.get("ts_trial", 0),
-                    "total_iter": final.get("total_iter", 0),
-                    "gvd": final.get("gvd", ""),
-                    "xml_description": final.get("xml_description", ""),
-                    "sc_log": final.get("sc_log", ""),
-                    "tb_log": final.get("tb_log", ""),
-                    "error": final.get("error"),
-                }
-
-                status = result["final_status"]
-                emoji = "🎉" if status == "pass" else "❌"
-                print(f"  {emoji} Result: {status} | SC:{result['sc_trial']} TS:{result['ts_trial']}")
-
-            except Exception as e:
-                result = {
-                    "module_name": moduleName,
-                    "description_type": descriptionType,
-                    "final_status": "error",
-                    "error": str(e),
-                    "sc_trial": 0, "ts_trial": 0, "total_iter": 0,
-                    "gvd": "", "xml_description": "", "sc_log": "", "tb_log": "",
-                }
-                print(f"  ❌ Pipeline error: {e}")
-
-            sample_results.append(result)
-
-        # Save report
-        reports_dir = os.path.join(moduleNormPath, "reports")
-        os.makedirs(reports_dir, exist_ok=True)
-
-        report_path = os.path.join(
-            reports_dir, f"report_langgraph.{descriptionType}.json"
-        )
-
-        report_data = {
-            "module_name": moduleName,
-            "description_type": descriptionType,
-            "samples": sample_results if samples > 1 else sample_results[0],
-        }
-
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, indent=2, ensure_ascii=False)
-
-        print(f"  📄 Report saved: {report_path}")
-        all_results[moduleName] = report_data
-
-    # Summary
-    print(f"\n{'═' * 60}")
-    print("  SUMMARY")
-    print(f"{'═' * 60}")
-    pass_count = 0
-    for name, data in all_results.items():
-        r = data["samples"] if isinstance(data["samples"], dict) else data["samples"][0]
-        status = r.get("final_status", "?")
-        if status == "pass":
-            pass_count += 1
-        emoji = "✅" if status == "pass" else "❌"
-        print(f"  {emoji} {name}: {status} (SC:{r.get('sc_trial',0)} TS:{r.get('ts_trial',0)})")
-    print(f"\n  Pass rate: {pass_count}/{total} ({pass_count/total*100:.1f}%)")
-
-    # Save global summary
-    os.makedirs("reports", exist_ok=True)
-    summary_path = f"reports/summary_langgraph.{descriptionType}.json"
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(all_results, f, indent=2, ensure_ascii=False)
-    print(f"  📄 Global summary: {summary_path}")
+    run_pipeline_batch(
+        module_paths=modulePaths,
+        description_type=descriptionType,
+        samples=samples,
+    )
 
 
 if __name__ == "__main__":

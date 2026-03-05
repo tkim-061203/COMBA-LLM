@@ -30,7 +30,12 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from comba_pipeline import build_comba_graph, make_initial_state, COMBAState
+from pipeline_runner import (
+    create_llm,
+    get_pipeline,
+    run_pipeline_sync,
+    run_pipeline_streaming,
+)
 
 load_dotenv()
 
@@ -38,37 +43,6 @@ COMBA_MODEL_NAME = "comba-verilog-pipeline"
 
 # Thread pool for running synchronous LangGraph in async context
 _executor = ThreadPoolExecutor(max_workers=4)
-
-
-# ──────────────────────────────────────────────────────────────
-# LLM Initialization
-# ──────────────────────────────────────────────────────────────
-
-def create_llm():
-    """Create LLM based on environment configuration."""
-    use_stub = os.environ.get("COMBA_USE_STUB", "").lower() in ("1", "true", "yes")
-
-    if use_stub:
-        from stub_llm import create_stub_llm
-        print("[COMBA API] Using StubLLM (testing mode)")
-        return create_stub_llm()
-
-    # Try COMBALlm (dual-GPU) first
-    try:
-        from llm_interface import COMBALlm
-        llm = COMBALlm.from_env()
-        print(f"[COMBA API] Using COMBALlm: {llm}")
-        return llm
-    except Exception as e:
-        print(f"[COMBA API] COMBALlm failed ({e}), falling back to ChatOpenAI")
-
-    # Fallback to ChatOpenAI
-    from langchain_openai import ChatOpenAI
-    base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
-    api_key = os.environ.get("LLM_API_KEY", "ollama")
-    model = os.environ.get("LLM_MODEL", "qwen2.5-coder:7b")
-    print(f"[COMBA API] Using ChatOpenAI: {model} @ {base_url}")
-    return ChatOpenAI(base_url=base_url, api_key=api_key, model=model, temperature=0.1)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -185,68 +159,8 @@ def format_final_output(final_state: dict) -> str:
     return "\n".join(parts)
 
 
-# ──────────────────────────────────────────────────────────────
-# Pipeline Runner
-# ──────────────────────────────────────────────────────────────
-
-_llm = None
-_graph = None
-
-
-def get_graph():
-    """Lazy-init the pipeline graph."""
-    global _llm, _graph
-    if _graph is None:
-        _llm = create_llm()
-        _graph = build_comba_graph(_llm)
-        print(f"[COMBA API] Pipeline graph compiled: {COMBA_MODEL_NAME}")
-    return _graph
-
-
-def is_xml_input(text: str) -> bool:
-    """Detect if user input is already COMBA XML."""
-    stripped = text.strip()
-    return stripped.startswith("<module") or stripped.startswith("<modules")
-
-
-def run_pipeline_streaming(user_message: str):
-    """
-    Run the full COMBA pipeline, yielding (node_name, state_update) per step.
-    Uses graph.stream() for node-by-node execution.
-    """
-    graph = get_graph()
-
-    state = make_initial_state(nl_input=user_message)
-
-    # If user provides raw XML, inject it directly
-    if is_xml_input(user_message):
-        state["xml_description"] = user_message
-        match = re.search(r'<module\s+id="([^"]+)"', user_message)
-        if match:
-            state["module_name"] = match.group(1)
-
-    config = {"recursion_limit": 100}
-
-    # graph.stream() yields dict: {node_name: state_update}
-    for event in graph.stream(state, config):
-        for node_name, state_update in event.items():
-            yield node_name, state_update
-
-
-def run_pipeline_sync(user_message: str) -> dict:
-    """Run the full COMBA pipeline synchronously. Returns final state."""
-    graph = get_graph()
-
-    state = make_initial_state(nl_input=user_message)
-
-    if is_xml_input(user_message):
-        state["xml_description"] = user_message
-        match = re.search(r'<module\s+id="([^"]+)"', user_message)
-        if match:
-            state["module_name"] = match.group(1)
-
-    config = {"recursion_limit": 100}
-    return graph.invoke(state, config)
+# Pipeline runner functions imported from pipeline_runner module.
+# run_pipeline_sync() and run_pipeline_streaming() are available as imports.
 
 
 # ──────────────────────────────────────────────────────────────
@@ -366,7 +280,9 @@ async def chat_completions(request: ChatCompletionRequest):
     # ── Non-streaming: run full pipeline, return formatted result ──
     try:
         loop = asyncio.get_event_loop()
-        final = await loop.run_in_executor(_executor, run_pipeline_sync, user_message)
+        final = await loop.run_in_executor(
+            _executor, lambda: run_pipeline_sync(user_message)
+        )
 
         # Build response text
         parts = []
@@ -409,10 +325,10 @@ async def health():
 async def health_llm():
     """Detailed LLM health check."""
     try:
-        graph = get_graph()
-        if hasattr(_llm, 'health_check'):
-            return _llm.health_check()
-        return {"status": "ok", "llm_type": type(_llm).__name__}
+        llm, _ = get_pipeline()
+        if hasattr(llm, 'health_check'):
+            return llm.health_check()
+        return {"status": "ok", "llm_type": type(llm).__name__}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 

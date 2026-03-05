@@ -797,7 +797,10 @@ def route_after_ts(state: COMBAState) -> str:
 
 
 def route_after_ted_syntax(state: COMBAState) -> str:
-    """Route Ⓒ: After TED Syntax — SC trial limit → debugger or fail."""
+    """Route Ⓒ: After TED Syntax — no error → TB, limit → fail, else → debugger."""
+    # If TED couldn't parse any error, skip debugger → go directly to TB
+    if not state.get("sc_exception"):
+        return "node_tb_sim"
     if state["sc_trial"] >= MAX_SC_TRIALS:
         return "end_fail_sc"
     return "node_debugger"
@@ -922,7 +925,7 @@ def build_comba_graph(llm):
     builder.add_conditional_edges(
         "node_ted_syntax",
         route_after_ted_syntax,
-        {"node_debugger": "node_debugger", "end_fail_sc": "end_fail_sc"},
+        {"node_tb_sim": "node_tb_sim", "node_debugger": "node_debugger", "end_fail_sc": "end_fail_sc"},
     )
 
     builder.add_conditional_edges(
