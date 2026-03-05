@@ -49,7 +49,7 @@ module adder_8bit(
 endmodule
 
 module full_adder (input a, b, cin, output sum, cout);
-    assign {cout, sum} = a + b + cin;
+    assign {{cout, sum}} = a + b + cin;
 endmodule
 """
 
@@ -239,7 +239,7 @@ Your task is to identify and fix the TOPMOST error precisely.
    - "MULTIDRIVEN" → remove duplicate drivers
    - "Specified --top-module was not found" → check module name matches id
 4. Return a JSON object with EXACTLY two fields:
-   {"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}
+   {{"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}}
 5. The buggy_code MUST be an EXACT substring of the current code.
 6. Return ONLY the JSON object, no explanation, no markdown fences.
 """
@@ -289,7 +289,7 @@ Your task is to identify and fix the TOPMOST functional failure.
    - Incorrect bit widths causing truncation
 4. Preserve the module interface (name, ports) exactly.
 5. Return a JSON object with EXACTLY two fields:
-   {"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}
+   {{"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}}
 6. The buggy_code MUST be an EXACT substring of the current code.
 7. Return ONLY the JSON object, no explanation, no markdown fences.
 """
