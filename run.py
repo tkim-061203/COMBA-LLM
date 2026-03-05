@@ -528,8 +528,11 @@ def runLangGraphFlow(
         # Read description
         if descriptionType == "xml":
             desc_file = os.path.join(moduleNormPath, "design_description.xml")
-        else:
+        elif descriptionType == "txt":
             desc_file = os.path.join(moduleNormPath, "design_description.txt")
+        else:
+            # e.g., "RTLLM.txt" → "design_description.RTLLM.txt"
+            desc_file = os.path.join(moduleNormPath, f"design_description.{descriptionType}")
 
         if not os.path.isfile(desc_file):
             print(f"  ⚠️ Description file not found: {desc_file}, skipping")
