@@ -29,7 +29,13 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
-from prompts import converterPromptTemplate, generatorPromptTemplate, correcterPromptTemplate
+from prompts import (
+    converterPromptTemplate,
+    generatorPromptTemplate,
+    correcterPromptTemplate,
+    edpPromptTemplate,
+    tdpPromptTemplate,
+)
 
 # ──────────────────────────────────────────────────────────────
 # Configuration Constants
@@ -358,12 +364,48 @@ class COMBANodes:
         sc_prev_exception_count = state["sc_exception_count"]
 
         # ── Call LLM to fix ──
-        result = correcterPromptTemplate.invoke({
-            "verilog_code": current_gvd,
-            "error_description": error_desc,
-            "phase": phase,
-        })
+        if phase == "sc":
+            # Use structured EDP template
+            result = edpPromptTemplate.invoke({
+                "module_name": state.get("module_name", "unknown"),
+                "sc_trial": state["sc_trial"],
+                "max_sc_trials": MAX_SC_TRIALS,
+                "verilog_code": current_gvd,
+                "topmost_error": state.get("sc_exception", error_desc),
+                "sc_log": (state.get("sc_log") or "")[:2000],  # truncate
+            })
+        elif phase == "ts":
+            # Use structured TDP template
+            # Extract trace lines from tdp
+            traces = ""
+            if error_desc and "Debug traces:" in error_desc:
+                traces = error_desc.split("Debug traces:")[-1].strip()
+            result = tdpPromptTemplate.invoke({
+                "module_name": state.get("module_name", "unknown"),
+                "ts_trial": state["ts_trial"],
+                "max_ts_trials": MAX_TS_TRIALS,
+                "verilog_code": current_gvd,
+                "topmost_failure": state.get("tb_failure", error_desc),
+                "debug_traces": traces or "(no traces available)",
+            })
+        else:
+            # Fallback to generic correcter
+            result = correcterPromptTemplate.invoke({
+                "verilog_code": current_gvd,
+                "error_description": error_desc,
+                "phase": phase,
+            })
+
+        # Switch to LoRA if available
+        if hasattr(self._llm, 'switch_to_lora'):
+            self._llm.switch_to_lora()
+
         response = self._llm.invoke(result)
+
+        # Switch back to base
+        if hasattr(self._llm, 'switch_to_base'):
+            self._llm.switch_to_base()
+
         fixed_code = response.content.strip()
 
         # Clean markdown fences
@@ -780,6 +822,10 @@ if __name__ == "__main__":
         "--stub", action="store_true",
         help="Use StubLLM instead of real LLM (for testing)",
     )
+    parser.add_argument(
+        "--vllm", action="store_true",
+        help="Use COMBALlm with dual vLLM servers (GPU 0 + GPU 1)",
+    )
     args = parser.parse_args()
 
     if not args.description and not args.xml:
@@ -789,6 +835,9 @@ if __name__ == "__main__":
     if args.stub:
         from stub_llm import create_stub_llm
         llm = create_stub_llm()
+    elif args.vllm:
+        from llm_interface import COMBALlm
+        llm = COMBALlm.from_env()
     else:
         from langchain_openai import ChatOpenAI
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
