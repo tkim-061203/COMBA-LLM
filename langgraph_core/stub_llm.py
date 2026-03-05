@@ -125,9 +125,8 @@ class StubLLM(BaseChatModel):
         ).lower()
 
         # Determine which response to return
-        # Order matters: check correcter/EDP/TDP first (most specific), then generator, then converter
-        if ("syntax debugging" in full_text or "functional debugging" in full_text
-                or "debugger" in full_text or ("fix" in full_text and "error" in full_text)):
+        # Order matters: check correcter first (most specific), then generator, then converter
+        if "debugger" in full_text or ("fix" in full_text and "error" in full_text):
             response_key = "correcter"
         elif "verilog code generator" in full_text or "generate complete" in full_text:
             response_key = "generator"

@@ -217,105 +217,9 @@ generatorPromptTemplate = ChatPromptTemplate([
     ("user", "{user_input}"),
 ])
 
-
-# ══════════════════════════════════════════════════════════════
-# 3. EDP: Exception Debugging Prompt (Syntax Errors)
-#    Based on COMBA Figure 6 — Topmost Exception Detection
-# ══════════════════════════════════════════════════════════════
-
-EDP_SYSTEM_PROMPT = """\
-You are a Verilog syntax debugging expert.
-You receive a Verilog module that failed Verilator syntax checking.
-Your task is to fix the TOPMOST error precisely.
-
-## Rules
-1. Fix ONLY the topmost error. Other errors may cascade from it.
-2. Preserve the module name, port names, and overall architecture.
-3. Common Verilator errors and fixes:
-   - "Signal not found" → declare the signal as wire/reg
-   - "Width mismatch" → adjust signal widths to match
-   - "UNDRIVEN" → ensure the signal is driven somewhere
-   - "MULTIDRIVEN" → remove duplicate drivers
-   - "Specified --top-module was not found" → check module name matches id
-4. The fixed code must compile with: verilator --lint-only -Wall -Wno-fatal
-5. Return ONLY the complete fixed Verilog code, no explanation.
-6. Ensure the file ends with a newline character.
-"""
-
-EDP_USER_PROMPT = """\
-## Module: {module_name}
-## Phase: Syntax Check | Trial {sc_trial}/{max_sc_trials}
-
-### Current Verilog Code
-```verilog
-{verilog_code}
-```
-
-### Topmost Verilator Error
-{topmost_error}
-
-### Full Syntax Check Log
-{sc_log}
-
-Fix the topmost error and return the complete corrected Verilog code.
-"""
-
-edpPromptTemplate = ChatPromptTemplate([
-    ("system", EDP_SYSTEM_PROMPT),
-    ("user", EDP_USER_PROMPT),
-])
-
-
-# ══════════════════════════════════════════════════════════════
-# 4. TDP: Testbench Debugging Prompt (Functional Failures)
-# ══════════════════════════════════════════════════════════════
-
-TDP_SYSTEM_PROMPT = """\
-You are a Verilog functional debugging expert.
-You receive a Verilog module that passed syntax checking but failed testbench simulation.
-Your task is to fix the TOPMOST functional failure.
-
-## Rules
-1. The error is a LOGIC BUG, not a syntax error. The code compiles fine.
-2. Analyze the testbench traces (INPUT/OUTPUT) to understand expected vs actual behavior.
-3. Common functional issues:
-   - Wrong operator (+ vs -, & vs |)
-   - Missing reset logic
-   - Off-by-one in counters
-   - Wrong state transitions in FSMs
-   - Incorrect bit widths causing truncation
-4. Preserve the module interface (name, ports) exactly.
-5. Return ONLY the complete fixed Verilog code, no explanation.
-6. Ensure the file ends with a newline character.
-"""
-
-TDP_USER_PROMPT = """\
-## Module: {module_name}
-## Phase: Testbench Simulation | Trial {ts_trial}/{max_ts_trials}
-
-### Current Verilog Code
-```verilog
-{verilog_code}
-```
-
-### Topmost Testbench Failure
-{topmost_failure}
-
-### Debug Traces
-{debug_traces}
-
-Fix the functional logic and return the complete corrected Verilog code.
-"""
-
-tdpPromptTemplate = ChatPromptTemplate([
-    ("system", TDP_SYSTEM_PROMPT),
-    ("user", TDP_USER_PROMPT),
-])
-
-
-# ══════════════════════════════════════════════════════════════
-# 5. CORRECTER: Generic (legacy compatibility for Track 1)
-# ══════════════════════════════════════════════════════════════
+# ──────────────────────────────────────────────────────────────
+# CORRECTER: Fix Verilog code based on error feedback
+# ──────────────────────────────────────────────────────────────
 
 CORRECTER_SYSTEM_PROMPT = """\
 You are a professional Verilog code debugger.
@@ -330,8 +234,10 @@ Your task is to fix the code so that it compiles and simulates correctly.
 5. Ensure the file ends with a newline character.
 
 ## Error Phase
-- If phase is "sc" (syntax check): focus on syntax errors, undeclared signals, width mismatches.
-- If phase is "ts" (testbench simulation): focus on logic/functional correctness issues.
+- If phase is "sc" (syntax check): the error comes from Verilator --lint-only.
+  Focus on syntax errors, undeclared signals, width mismatches, etc.
+- If phase is "ts" (testbench simulation): the error comes from testbench assertion failures.
+  Focus on logic/functional correctness issues.
 """
 
 CORRECTER_USER_PROMPT = """\
