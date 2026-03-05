@@ -113,11 +113,13 @@ class TestRoutingFunctions:
     def test_route_after_ted_syntax_under_limit(self):
         state = make_initial_state()
         state["sc_trial"] = 3
+        state["sc_exception"] = "%Error: some error"
         assert route_after_ted_syntax(state) == "node_debugger"
 
     def test_route_after_ted_syntax_at_limit(self):
         state = make_initial_state()
         state["sc_trial"] = MAX_SC_TRIALS
+        state["sc_exception"] = "%Error: some error"
         assert route_after_ted_syntax(state) == "end_fail_sc"
 
     def test_route_after_ted_tb_under_limit(self):
