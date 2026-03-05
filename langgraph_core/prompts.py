@@ -217,6 +217,111 @@ generatorPromptTemplate = ChatPromptTemplate([
     ("user", "{user_input}"),
 ])
 
+
+# ══════════════════════════════════════════════════════════════
+# 3. EDP: Exception Debugging Prompt (Syntax Errors)
+#    Based on COMBA Figure 6 — Topmost Exception Detection
+#    v2: Returns JSON patch {buggy_code, correct_code}
+# ══════════════════════════════════════════════════════════════
+
+EDP_SYSTEM_PROMPT = """\
+You are a Verilog syntax debugging expert.
+You receive a Verilog module that failed Verilator syntax checking.
+Your task is to identify and fix the TOPMOST error precisely.
+
+## Rules
+1. Fix ONLY the topmost error. Other errors may cascade from it.
+2. Preserve the module name, port names, and overall architecture.
+3. Common Verilator errors and fixes:
+   - "Signal not found" → declare the signal as wire/reg
+   - "Width mismatch" → adjust signal widths to match
+   - "UNDRIVEN" → ensure the signal is driven somewhere
+   - "MULTIDRIVEN" → remove duplicate drivers
+   - "Specified --top-module was not found" → check module name matches id
+4. Return a JSON object with EXACTLY two fields:
+   {"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}
+5. The buggy_code MUST be an EXACT substring of the current code.
+6. Return ONLY the JSON object, no explanation, no markdown fences.
+"""
+
+EDP_USER_PROMPT = """\
+## Module: {module_name}
+## Phase: Syntax Check | Trial {sc_trial}/{max_sc_trials}
+
+### Current Verilog Code
+```verilog
+{verilog_code}
+```
+
+### Topmost Verilator Error
+{topmost_error}
+
+### Full Syntax Check Log
+{sc_log}
+
+Identify the buggy line(s) causing the topmost error and return a JSON patch.
+"""
+
+edpPromptTemplate = ChatPromptTemplate([
+    ("system", EDP_SYSTEM_PROMPT),
+    ("user", EDP_USER_PROMPT),
+])
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. TDP: Testbench Debugging Prompt (Functional Failures)
+#    v2: Returns JSON patch {buggy_code, correct_code}
+# ══════════════════════════════════════════════════════════════
+
+TDP_SYSTEM_PROMPT = """\
+You are a Verilog functional debugging expert.
+You receive a Verilog module that passed syntax checking but failed testbench simulation.
+Your task is to identify and fix the TOPMOST functional failure.
+
+## Rules
+1. The error is a LOGIC BUG, not a syntax error. The code compiles fine.
+2. Analyze the testbench traces (INPUT/OUTPUT) to understand expected vs actual behavior.
+3. Common functional issues:
+   - Wrong operator (+ vs -, & vs |)
+   - Missing reset logic
+   - Off-by-one in counters
+   - Wrong state transitions in FSMs
+   - Incorrect bit widths causing truncation
+4. Preserve the module interface (name, ports) exactly.
+5. Return a JSON object with EXACTLY two fields:
+   {"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}
+6. The buggy_code MUST be an EXACT substring of the current code.
+7. Return ONLY the JSON object, no explanation, no markdown fences.
+"""
+
+TDP_USER_PROMPT = """\
+## Module: {module_name}
+## Phase: Testbench Simulation | Trial {ts_trial}/{max_ts_trials}
+
+### Current Verilog Code
+```verilog
+{verilog_code}
+```
+
+### Topmost Testbench Failure
+{topmost_failure}
+
+### Debug Traces
+{debug_traces}
+
+Identify the buggy line(s) causing the failure and return a JSON patch.
+"""
+
+tdpPromptTemplate = ChatPromptTemplate([
+    ("system", TDP_SYSTEM_PROMPT),
+    ("user", TDP_USER_PROMPT),
+])
+
+
+# ══════════════════════════════════════════════════════════════
+# 5. CORRECTER: Generic (legacy compatibility)
+# ══════════════════════════════════════════════════════════════
+
 # ──────────────────────────────────────────────────────────────
 # CORRECTER: Fix Verilog code based on error feedback
 # ──────────────────────────────────────────────────────────────

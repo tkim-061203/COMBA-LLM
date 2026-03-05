@@ -1,14 +1,19 @@
 """
-COMBA-PROMPT Full Verification Pipeline — LangGraph Implementation.
+COMBA-PROMPT Full Verification Pipeline v2 — LangGraph Implementation.
 
-Track 1: 7 nodes, 5 conditional edges, Rollback Manager, EDTM, Iteration Control.
+8 nodes, 6 conditional edges, Rollback Manager, EDTM, Iteration Control.
 
 Flow:
   NL → [Converter] → XML → [Generator] → Verilog (GVD)
     → [SC] → pass? → [TB] → pass? → END ✅
               ↓ fail          ↓ fail
-         [TED_SC]→[Correcter]→[SC]  (loop)
-                          [TED_TB]→[Correcter]→[SC]  (loop)
+         [TED_SC]→[Debugger]→[Patcher]→[SC]  (loop)
+                          [TED_TB]→[Debugger]→[Patcher]→[SC]  (loop)
+
+v2 Changes:
+  - Correcter → Debugger: outputs JSON patch {buggy_code, correct_code}
+  - New Patch Applier node: applies JSON patch with fuzzy match + rollback
+  - 6 routing decisions (was 5)
 
 Usage:
   # With real LLM
@@ -29,7 +34,12 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
-from prompts import converterPromptTemplate, generatorPromptTemplate, correcterPromptTemplate
+from prompts import (
+    converterPromptTemplate,
+    generatorPromptTemplate,
+    edpPromptTemplate,
+    tdpPromptTemplate,
+)
 
 # ──────────────────────────────────────────────────────────────
 # Configuration Constants
@@ -45,7 +55,7 @@ VERILATOR_WERROR = ["UNDRIVEN", "MULTIDRIVEN"]
 
 
 # ──────────────────────────────────────────────────────────────
-# 1. COMBAState — TypedDict with ~20 fields
+# 1. COMBAState — TypedDict
 # ──────────────────────────────────────────────────────────────
 class COMBAState(TypedDict):
     # ── Input/Output ──
@@ -79,6 +89,9 @@ class COMBAState(TypedDict):
     total_iter: int                            # Total iteration counter
     rollback_triggered: bool                   # Rollback triggered this iteration?
 
+    # ── Debugger Output ──
+    debugger_patch: Optional[dict]             # JSON {buggy_code, correct_code} from Debugger
+
     # ── Result ──
     final_status: Optional[str]                # "pass", "fail_sc", "fail_ts", "max_iter"
     error: Optional[str]                       # Runtime error message
@@ -107,6 +120,7 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         ts_trial=0,
         total_iter=0,
         rollback_triggered=False,
+        debugger_patch=None,
         final_status=None,
         error=None,
         work_dir=None,
@@ -114,11 +128,11 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
 
 
 # ──────────────────────────────────────────────────────────────
-# 2. Seven Nodes
+# 2. Eight Nodes
 # ──────────────────────────────────────────────────────────────
 class COMBANodes:
     """
-    Encapsulates the 7 pipeline nodes.
+    Encapsulates the 8 pipeline nodes (v2).
 
     Args:
         llm: A LangChain-compatible chat model (or StubLLM for testing).
@@ -333,16 +347,17 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 5: Correcter — Fix code using EDP or TDP
+    # Node 5a: Debugger — LLM #2 → JSON patch {buggy_code, correct_code}
     # ──────────────────────────────────────────────────────────
-    def node_correcter(self, state: COMBAState) -> dict:
+    def node_debugger(self, state: COMBAState) -> dict:
         """
-        Correcter node with Rollback Manager.
-        Takes EDP (SC phase) or TDP (TS phase) + current GVD → fix.
-        If resulting code is worse (more exceptions), rollback.
+        Debugger node (v2).
+        Takes EDP (SC phase) or TDP (TS phase) + current GVD.
+        LLM returns JSON: {"buggy_code": "...", "correct_code": "..."}.
+        Rollback logic is now in node_patcher.
         """
         print("\n" + "=" * 60)
-        print(f"🔧 NODE: Correcter (phase={state['phase']})")
+        print(f"🐛 NODE: Debugger (phase={state['phase']})")
         print("=" * 60)
 
         phase = state["phase"]
@@ -350,38 +365,130 @@ class COMBANodes:
         error_desc = state["edp"] if phase == "sc" else state["tdp"]
 
         if not error_desc:
-            print("  ⚠️ No error description available, skipping correction")
+            print("  ⚠️ No error description available, skipping")
             return {}
+
+        # ── Call LLM to produce JSON patch ──
+        if phase == "sc":
+            result = edpPromptTemplate.invoke({
+                "module_name": state.get("module_name", "unknown"),
+                "sc_trial": state["sc_trial"],
+                "max_sc_trials": MAX_SC_TRIALS,
+                "verilog_code": current_gvd,
+                "topmost_error": state.get("sc_exception", error_desc),
+                "sc_log": (state.get("sc_log") or "")[:2000],
+            })
+        else:
+            traces = ""
+            if error_desc and "Debug traces:" in error_desc:
+                traces = error_desc.split("Debug traces:")[-1].strip()
+            result = tdpPromptTemplate.invoke({
+                "module_name": state.get("module_name", "unknown"),
+                "ts_trial": state["ts_trial"],
+                "max_ts_trials": MAX_TS_TRIALS,
+                "verilog_code": current_gvd,
+                "topmost_failure": state.get("tb_failure", error_desc),
+                "debug_traces": traces or "(no traces available)",
+            })
+
+        # Switch to LoRA if available
+        if hasattr(self._llm, 'switch_to_lora'):
+            self._llm.switch_to_lora()
+
+        response = self._llm.invoke(result)
+
+        # Switch back to base
+        if hasattr(self._llm, 'switch_to_base'):
+            self._llm.switch_to_base()
+
+        raw_output = response.content.strip()
+
+        # Parse JSON patch from response
+        patch = self._parse_debugger_json(raw_output)
+
+        if patch:
+            print(f"  ✅ Debugger produced JSON patch")
+            print(f"     buggy_code: {patch['buggy_code'][:60]}...")
+            print(f"     correct_code: {patch['correct_code'][:60]}...")
+        else:
+            print("  ⚠️ Debugger failed to produce valid JSON patch")
+
+        return {
+            "debugger_patch": patch,
+        }
+
+    # ──────────────────────────────────────────────────────────
+    # Node 5b: Patcher — Apply JSON patch to GVD
+    # ──────────────────────────────────────────────────────────
+    def node_patcher(self, state: COMBAState) -> dict:
+        """
+        Patch Applier (v2).
+        1. Save snapshot sgvd
+        2. Normalize whitespace before match
+        3. Validate: buggy_code exists in GVD?
+        4. If found → str.replace() → new GVD
+        5. If NOT found → fuzzy match or skip (keep GVD unchanged)
+        6. Compare error count: increase → rollback to sgvd
+        """
+        print("\n" + "=" * 60)
+        print("🩹 NODE: Patch Applier")
+        print("=" * 60)
+
+        patch = state.get("debugger_patch")
+        current_gvd = state["gvd"]
 
         # ── Rollback Manager: Save snapshot ──
         sgvd = current_gvd
         sc_prev_exception_count = state["sc_exception_count"]
 
-        # ── Call LLM to fix ──
-        result = correcterPromptTemplate.invoke({
-            "verilog_code": current_gvd,
-            "error_description": error_desc,
-            "phase": phase,
-        })
-        response = self._llm.invoke(result)
-        fixed_code = response.content.strip()
+        if not patch or not patch.get("buggy_code") or not patch.get("correct_code"):
+            print("  ⚠️ No valid patch, keeping current GVD")
+            return {
+                "sgvd": sgvd,
+                "sc_prev_exception_count": sc_prev_exception_count,
+                "rollback_triggered": True,
+            }
 
-        # Clean markdown fences
-        fixed_code = self._extract_verilog(fixed_code)
+        buggy_code = patch["buggy_code"]
+        correct_code = patch["correct_code"]
+
+        # Try exact match first
+        if buggy_code in current_gvd:
+            new_gvd = current_gvd.replace(buggy_code, correct_code, 1)
+            print(f"  ✅ Exact match found — patch applied")
+        else:
+            # Try normalized whitespace match
+            normalized_gvd = self._normalize_whitespace(current_gvd)
+            normalized_buggy = self._normalize_whitespace(buggy_code)
+
+            if normalized_buggy in normalized_gvd:
+                # Find the actual lines and replace
+                new_gvd = self._fuzzy_replace(current_gvd, buggy_code, correct_code)
+                if new_gvd != current_gvd:
+                    print(f"  ✅ Fuzzy match found — patch applied")
+                else:
+                    print(f"  ⚠️ Fuzzy match failed to apply, keeping current GVD")
+                    return {
+                        "sgvd": sgvd,
+                        "sc_prev_exception_count": sc_prev_exception_count,
+                        "rollback_triggered": True,
+                    }
+            else:
+                print(f"  ⚠️ buggy_code NOT FOUND in GVD — skipping patch")
+                return {
+                    "sgvd": sgvd,
+                    "sc_prev_exception_count": sc_prev_exception_count,
+                    "rollback_triggered": True,
+                }
 
         # Ensure trailing newline
-        if fixed_code and not fixed_code.endswith("\n"):
-            fixed_code += "\n"
+        if new_gvd and not new_gvd.endswith("\n"):
+            new_gvd += "\n"
 
-        # If the LLM returned empty or very short code, don't apply
-        if not fixed_code or len(fixed_code.strip()) < 20:
-            print("  ⚠️ Correcter returned invalid code, keeping previous version")
-            return {"rollback_triggered": True}
-
-        print(f"  ✅ Correcter produced {len(fixed_code.splitlines())} lines")
+        print(f"  📝 GVD updated: {len(new_gvd.splitlines())} lines")
 
         return {
-            "gvd": fixed_code,
+            "gvd": new_gvd,
             "sgvd": sgvd,
             "sc_prev_exception_count": sc_prev_exception_count,
             "rollback_triggered": False,
@@ -569,6 +676,82 @@ class COMBANodes:
     # ──────────────────────────────────────────────────────────
     # Utility: Extract Verilog from LLM response
     # ──────────────────────────────────────────────────────────
+    def _parse_debugger_json(self, content: str) -> Optional[dict]:
+        """Parse JSON patch {buggy_code, correct_code} from debugger output."""
+        # Try direct JSON parse
+        try:
+            data = json.loads(content)
+            if "buggy_code" in data and "correct_code" in data:
+                return {
+                    "buggy_code": data["buggy_code"],
+                    "correct_code": data["correct_code"],
+                }
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        # Try extracting JSON from markdown code block
+        json_match = re.search(
+            r'```(?:json)?\s*\n(.*?)\n```',
+            content, re.DOTALL
+        )
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                if "buggy_code" in data and "correct_code" in data:
+                    return {
+                        "buggy_code": data["buggy_code"],
+                        "correct_code": data["correct_code"],
+                    }
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        # Try extracting JSON object from mixed text
+        brace_match = re.search(r'\{[^{}]*"buggy_code"[^{}]*"correct_code"[^{}]*\}', content, re.DOTALL)
+        if not brace_match:
+            brace_match = re.search(r'\{[^{}]*"correct_code"[^{}]*"buggy_code"[^{}]*\}', content, re.DOTALL)
+        if brace_match:
+            try:
+                data = json.loads(brace_match.group(0))
+                if "buggy_code" in data and "correct_code" in data:
+                    return {
+                        "buggy_code": data["buggy_code"],
+                        "correct_code": data["correct_code"],
+                    }
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        return None
+
+    @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        """Collapse all whitespace to single spaces for fuzzy matching."""
+        return re.sub(r'\s+', ' ', text).strip()
+
+    @staticmethod
+    def _fuzzy_replace(source: str, buggy: str, correct: str) -> str:
+        """
+        Fuzzy replace: normalize both sides, find match, replace in original.
+        Falls back to line-by-line matching.
+        """
+        # Normalize the buggy code to compare
+        buggy_lines = [l.strip() for l in buggy.strip().splitlines()]
+        source_lines = source.splitlines()
+
+        # Find the starting line index
+        for i in range(len(source_lines) - len(buggy_lines) + 1):
+            match = True
+            for j, bl in enumerate(buggy_lines):
+                if source_lines[i + j].strip() != bl:
+                    match = False
+                    break
+            if match:
+                # Replace the matched lines
+                correct_lines = correct.strip().splitlines()
+                new_lines = source_lines[:i] + correct_lines + source_lines[i + len(buggy_lines):]
+                return "\n".join(new_lines) + "\n"
+
+        return source  # no match found
+
     def _extract_verilog(self, content: str) -> str:
         """Extract Verilog code from various LLM output formats."""
         # Try JSON format first
@@ -596,40 +779,39 @@ class COMBANodes:
 
 
 # ──────────────────────────────────────────────────────────────
-# 3. Five Conditional Edges (Routing Functions)
+# 3. Six Conditional Edges (Routing Functions)
 # ──────────────────────────────────────────────────────────────
 
 def route_after_sc(state: COMBAState) -> str:
-    """After Syntax Check: has errors? → TED_SC, else → TB."""
+    """Route Ⓐ: After Syntax Check — has errors? → TED_SC, else → TB."""
     if state["sc_exception_count"] > 0:
         return "node_ted_syntax"
     return "node_tb_sim"
 
 
 def route_after_ts(state: COMBAState) -> str:
-    """After TB Sim: has failures? → TED_TB, else → END (pass!)."""
+    """Route Ⓑ: After TB Sim — has failures? → TED_TB, else → PASS."""
     if state.get("tb_failure"):
         return "node_ted_tb"
-    # All pass!
     return "end_pass"
 
 
 def route_after_ted_syntax(state: COMBAState) -> str:
-    """After TED Syntax: check SC trial limit → correcter or give up."""
+    """Route Ⓒ: After TED Syntax — SC trial limit → debugger or fail."""
     if state["sc_trial"] >= MAX_SC_TRIALS:
         return "end_fail_sc"
-    return "node_correcter"
+    return "node_debugger"
 
 
 def route_after_ted_tb(state: COMBAState) -> str:
-    """After TED TB: check TS trial limit → correcter or give up."""
+    """Route Ⓓ: After TED TB — TS trial limit → debugger or fail."""
     if state["ts_trial"] >= MAX_TS_TRIALS:
         return "end_fail_ts"
-    return "node_correcter"
+    return "node_debugger"
 
 
-def route_after_correcter(state: COMBAState) -> str:
-    """After Correcter: check total iteration limit → SC or give up."""
+def route_after_patcher(state: COMBAState) -> str:
+    """Route Ⓔ: After Patcher — total iteration limit → SC or fail."""
     if state["total_iter"] >= MAX_TOTAL_ITER:
         return "end_max_iter"
     return "node_syntax_check"
@@ -669,22 +851,22 @@ def end_max_iter(state: COMBAState) -> dict:
 
 def build_comba_graph(llm):
     """
-    Build the full COMBA verification pipeline as a LangGraph.
+    Build the full COMBA verification pipeline v2 as a LangGraph.
 
     Graph topology:
         START → converter → generator → syntax_check
-               ┌──────────────────────────────────┐
-               ↓                                   │
-        syntax_check ──(pass)──→ tb_sim            │
-               │                   │               │
-               ↓ (fail)            ↓ (fail)        │
-        ted_syntax            ted_tb               │
-               │                   │               │
-               ↓                   ↓               │
-        correcter ─────────────────────────────────┘
-               │
-               ↓ (max_iter)
-              END
+               ┌──────────────────────────────────────────┐
+               ↓                                          │
+        syntax_check ──(pass)──→ tb_sim                   │
+               │                   │                      │
+               ↓ (fail)            ↓ (fail)               │
+        ted_syntax            ted_tb                      │
+               │                   │                      │
+               ↓                   ↓                      │
+        debugger ──→ patcher ─────────────────────────────┘
+                       │
+                       ↓ (max_iter)
+                      END
 
     Args:
         llm: LangChain-compatible chat model.
@@ -696,12 +878,13 @@ def build_comba_graph(llm):
 
     builder = StateGraph(COMBAState)
 
-    # ── Add all nodes ──
+    # ── Add all 8 pipeline nodes ──
     builder.add_node("node_converter", nodes.node_converter)
     builder.add_node("node_generator", nodes.node_generator)
     builder.add_node("node_syntax_check", nodes.node_syntax_check)
     builder.add_node("node_ted_syntax", nodes.node_ted_syntax)
-    builder.add_node("node_correcter", nodes.node_correcter)
+    builder.add_node("node_debugger", nodes.node_debugger)
+    builder.add_node("node_patcher", nodes.node_patcher)
     builder.add_node("node_tb_sim", nodes.node_tb_sim)
     builder.add_node("node_ted_tb", nodes.node_ted_tb)
 
@@ -715,6 +898,7 @@ def build_comba_graph(llm):
     builder.add_edge(START, "node_converter")
     builder.add_edge("node_converter", "node_generator")
     builder.add_edge("node_generator", "node_syntax_check")
+    builder.add_edge("node_debugger", "node_patcher")    # always: debugger → patcher
 
     # Terminal → END
     builder.add_edge("end_pass", END)
@@ -722,7 +906,7 @@ def build_comba_graph(llm):
     builder.add_edge("end_fail_ts", END)
     builder.add_edge("end_max_iter", END)
 
-    # ── Conditional edges (5 routing decisions) ──
+    # ── Conditional edges (6 routing decisions) ──
     builder.add_conditional_edges(
         "node_syntax_check",
         route_after_sc,
@@ -738,18 +922,18 @@ def build_comba_graph(llm):
     builder.add_conditional_edges(
         "node_ted_syntax",
         route_after_ted_syntax,
-        {"node_correcter": "node_correcter", "end_fail_sc": "end_fail_sc"},
+        {"node_debugger": "node_debugger", "end_fail_sc": "end_fail_sc"},
     )
 
     builder.add_conditional_edges(
         "node_ted_tb",
         route_after_ted_tb,
-        {"node_correcter": "node_correcter", "end_fail_ts": "end_fail_ts"},
+        {"node_debugger": "node_debugger", "end_fail_ts": "end_fail_ts"},
     )
 
     builder.add_conditional_edges(
-        "node_correcter",
-        route_after_correcter,
+        "node_patcher",
+        route_after_patcher,
         {"node_syntax_check": "node_syntax_check", "end_max_iter": "end_max_iter"},
     )
 

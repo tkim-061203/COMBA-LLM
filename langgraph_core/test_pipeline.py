@@ -1,8 +1,8 @@
 """
-E2E Tests for COMBA-PROMPT LangGraph Pipeline.
+E2E Tests for COMBA-PROMPT LangGraph Pipeline v2.
 
 Tests the full pipeline with StubLLM and mocked Verilator subprocess calls.
-All 5 routing decisions, Rollback Manager, EDTM, and Iteration Control
+All 6 routing decisions, Rollback Manager, EDTM, and Iteration Control
 are verified without external dependencies.
 
 Usage:
@@ -26,7 +26,7 @@ from comba_pipeline import (
     route_after_ts,
     route_after_ted_syntax,
     route_after_ted_tb,
-    route_after_correcter,
+    route_after_patcher,
 )
 from stub_llm import (
     create_stub_llm,
@@ -38,6 +38,7 @@ from stub_llm import (
     FIXED_VERILOG,
     WORSE_VERILOG,
     GOOD_XML,
+    DEBUGGER_PATCH_FIXED,
 )
 
 
@@ -87,7 +88,7 @@ TB_FAIL_RESULT = make_verilator_result(
 # ──────────────────────────────────────────────────────────────
 
 class TestRoutingFunctions:
-    """Test the 5 conditional routing functions in isolation."""
+    """Test the 6 conditional routing functions in isolation."""
 
     def test_route_after_sc_has_errors(self):
         state = make_initial_state()
@@ -112,7 +113,7 @@ class TestRoutingFunctions:
     def test_route_after_ted_syntax_under_limit(self):
         state = make_initial_state()
         state["sc_trial"] = 3
-        assert route_after_ted_syntax(state) == "node_correcter"
+        assert route_after_ted_syntax(state) == "node_debugger"
 
     def test_route_after_ted_syntax_at_limit(self):
         state = make_initial_state()
@@ -122,22 +123,22 @@ class TestRoutingFunctions:
     def test_route_after_ted_tb_under_limit(self):
         state = make_initial_state()
         state["ts_trial"] = 2
-        assert route_after_ted_tb(state) == "node_correcter"
+        assert route_after_ted_tb(state) == "node_debugger"
 
     def test_route_after_ted_tb_at_limit(self):
         state = make_initial_state()
         state["ts_trial"] = MAX_TS_TRIALS
         assert route_after_ted_tb(state) == "end_fail_ts"
 
-    def test_route_after_correcter_under_limit(self):
+    def test_route_after_patcher_under_limit(self):
         state = make_initial_state()
         state["total_iter"] = 5
-        assert route_after_correcter(state) == "node_syntax_check"
+        assert route_after_patcher(state) == "node_syntax_check"
 
-    def test_route_after_correcter_at_limit(self):
+    def test_route_after_patcher_at_limit(self):
         state = make_initial_state()
         state["total_iter"] = MAX_TOTAL_ITER
-        assert route_after_correcter(state) == "end_max_iter"
+        assert route_after_patcher(state) == "end_max_iter"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -241,19 +242,70 @@ class TestNodes:
         # After exceeding limit, EDP should contain EDTM warning
         assert "EDTM WARNING" in result["edp"]
 
-    def test_node_correcter(self):
+    def test_node_debugger(self):
+        """Test debugger outputs JSON patch instead of full code."""
         llm = create_buggy_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
         state["gvd"] = BUGGY_VERILOG
         state["sc_exception_count"] = 1
+        state["sc_trial"] = 1
         state["phase"] = "sc"
+        state["module_name"] = "adder_8bit"
+        state["sc_exception"] = "%Error: Signal 'result' not found"
         state["edp"] = "Topmost Verilator error:\n%Error: Signal 'result' not found"
+        state["sc_log"] = "%Error: adder_8bit.v:8: Signal 'result' not found\n"
 
-        result = nodes.node_correcter(state)
+        result = nodes.node_debugger(state)
+        assert result["debugger_patch"] is not None
+        assert "buggy_code" in result["debugger_patch"]
+        assert "correct_code" in result["debugger_patch"]
+
+    def test_node_patcher_exact_match(self):
+        """Test patcher applies patch when buggy_code is found exactly."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["gvd"] = BUGGY_VERILOG
+        state["sc_exception_count"] = 1
+        state["debugger_patch"] = {
+            "buggy_code": "assign result = a + b + cin;",
+            "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;",
+        }
+
+        result = nodes.node_patcher(state)
         assert result["gvd"] is not None
         assert result["sgvd"] == BUGGY_VERILOG  # snapshot saved
         assert result["rollback_triggered"] is False
+        assert "wire [8:0] result;" in result["gvd"]
+
+    def test_node_patcher_no_match(self):
+        """Test patcher skips when buggy_code is not found."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["gvd"] = GOOD_VERILOG
+        state["sc_exception_count"] = 0
+        state["debugger_patch"] = {
+            "buggy_code": "nonexistent code snippet",
+            "correct_code": "replacement code",
+        }
+
+        result = nodes.node_patcher(state)
+        assert result["rollback_triggered"] is True
+        assert "gvd" not in result  # GVD not changed
+
+    def test_node_patcher_no_patch(self):
+        """Test patcher handles None patch gracefully."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["gvd"] = BUGGY_VERILOG
+        state["sc_exception_count"] = 1
+        state["debugger_patch"] = None
+
+        result = nodes.node_patcher(state)
+        assert result["rollback_triggered"] is True
 
     def test_node_ted_tb_extracts_todo_failure(self):
         llm = create_stub_llm()
@@ -327,7 +379,7 @@ class TestE2EGraph:
         assert result["ts_trial"] == 1
 
     def test_sc_fix_then_pass(self):
-        """SC fails → TED → Correcter fixes → SC passes → TB passes."""
+        """SC fails → TED → Debugger → Patcher fixes → SC passes → TB passes."""
         llm = create_buggy_stub_llm()
         result = self._run_graph(
             llm,
@@ -354,16 +406,19 @@ class TestE2EGraph:
         assert result["sc_trial"] >= MAX_SC_TRIALS
 
     def test_rollback_preserves_sgvd(self):
-        """When correcter is called, sgvd is saved for potential rollback."""
+        """When patcher is called, sgvd is saved for potential rollback."""
         llm = create_buggy_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
         state["gvd"] = BUGGY_VERILOG
         state["sc_exception_count"] = 1
         state["phase"] = "sc"
-        state["edp"] = "Some error"
+        state["debugger_patch"] = {
+            "buggy_code": "assign result = a + b + cin;",
+            "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;",
+        }
 
-        result = nodes.node_correcter(state)
+        result = nodes.node_patcher(state)
         # sgvd should be the original buggy code (saved before fix)
         assert result["sgvd"] == BUGGY_VERILOG
         assert result["gvd"] != result["sgvd"]  # new code is different
@@ -388,13 +443,14 @@ class TestE2EGraph:
         else:
             node_ids = []
 
-        # Check all expected nodes exist
+        # Check all expected nodes exist (8 pipeline + 4 terminal = 12)
         expected_nodes = [
             "node_converter",
             "node_generator",
             "node_syntax_check",
             "node_ted_syntax",
-            "node_correcter",
+            "node_debugger",
+            "node_patcher",
             "node_tb_sim",
             "node_ted_tb",
             "end_pass",
@@ -465,6 +521,7 @@ class TestState:
         assert state["phase"] == "sc"
         assert state["edtm"] == {}
         assert state["final_status"] is None
+        assert state["debugger_patch"] is None
 
     def test_initial_state_with_args(self):
         state = make_initial_state(nl_input="test", module_name="foo")
