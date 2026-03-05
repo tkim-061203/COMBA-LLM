@@ -1,9 +1,10 @@
 """
-E2E Tests for COMBA-PROMPT LangGraph Pipeline v2.
+E2E Tests for COMBA-PROMPT LangGraph Pipeline v3.
 
 Tests the full pipeline with StubLLM and mocked Verilator subprocess calls.
-All 6 routing decisions, Rollback Manager, EDTM, and Iteration Control
-are verified without external dependencies.
+All 8 routing decisions, ExtractionGuard, PreSCCheck, MultiAttemptManager,
+Rollback Manager, EDTM, and Iteration Control are verified without
+external dependencies.
 
 Usage:
     python -m pytest test_pipeline.py -v
@@ -26,7 +27,8 @@ from comba_pipeline import (
     route_after_ts,
     route_after_ted_syntax,
     route_after_ted_tb,
-    route_after_patcher,
+    route_after_extraction_guard,
+    route_after_pre_sc_check,
 )
 from stub_llm import (
     create_stub_llm,
@@ -88,8 +90,43 @@ TB_FAIL_RESULT = make_verilator_result(
 # ──────────────────────────────────────────────────────────────
 
 class TestRoutingFunctions:
-    """Test the 6 conditional routing functions in isolation."""
+    """Test the 8 conditional routing functions in isolation."""
 
+    # ── ExtractionGuard routing (v3 NEW) ──
+    def test_route_after_extraction_guard_success(self):
+        state = make_initial_state()
+        state["extraction_result"] = {"success": True, "code": "module test..."}
+        assert route_after_extraction_guard(state) == "node_pre_sc_check"
+
+    def test_route_after_extraction_guard_fail_from_generator(self):
+        state = make_initial_state()
+        state["extraction_result"] = {"success": False}
+        state["_last_llm_source"] = "generator"
+        assert route_after_extraction_guard(state) == "node_generator"
+
+    def test_route_after_extraction_guard_fail_from_debugger(self):
+        state = make_initial_state()
+        state["extraction_result"] = {"success": False}
+        state["_last_llm_source"] = "debugger"
+        assert route_after_extraction_guard(state) == "node_debugger"
+
+    # ── PreSCCheck routing (v3 NEW) ──
+    def test_route_after_pre_sc_check_passed(self):
+        state = make_initial_state()
+        state["pre_sc_result"] = {"passed": True, "auto_fixed_code": None}
+        assert route_after_pre_sc_check(state) == "node_syntax_check"
+
+    def test_route_after_pre_sc_check_auto_fixed(self):
+        state = make_initial_state()
+        state["pre_sc_result"] = {"passed": False, "auto_fixed_code": "module ..."}
+        assert route_after_pre_sc_check(state) == "node_syntax_check"
+
+    def test_route_after_pre_sc_check_failed(self):
+        state = make_initial_state()
+        state["pre_sc_result"] = {"passed": False, "auto_fixed_code": None}
+        assert route_after_pre_sc_check(state) == "node_debugger"
+
+    # ── SC routing (unchanged) ──
     def test_route_after_sc_has_errors(self):
         state = make_initial_state()
         state["sc_exception_count"] = 2
@@ -100,6 +137,7 @@ class TestRoutingFunctions:
         state["sc_exception_count"] = 0
         assert route_after_sc(state) == "node_tb_sim"
 
+    # ── TS routing (unchanged) ──
     def test_route_after_ts_has_failure(self):
         state = make_initial_state()
         state["tb_failure"] = "TODO 3 Failed"
@@ -110,6 +148,7 @@ class TestRoutingFunctions:
         state["tb_failure"] = None
         assert route_after_ts(state) == "end_pass"
 
+    # ── TED SC routing (enhanced with MultiAttempt) ──
     def test_route_after_ted_syntax_under_limit(self):
         state = make_initial_state()
         state["sc_trial"] = 3
@@ -122,6 +161,14 @@ class TestRoutingFunctions:
         state["sc_exception"] = "%Error: some error"
         assert route_after_ted_syntax(state) == "end_fail_sc"
 
+    def test_route_after_ted_syntax_no_exception(self):
+        """When TED finds no parseable error, route to TB instead of debugger."""
+        state = make_initial_state()
+        state["sc_exception"] = None
+        state["sc_trial"] = 3
+        assert route_after_ted_syntax(state) == "node_tb_sim"
+
+    # ── TED TB routing (enhanced with MultiAttempt) ──
     def test_route_after_ted_tb_under_limit(self):
         state = make_initial_state()
         state["ts_trial"] = 2
@@ -131,23 +178,6 @@ class TestRoutingFunctions:
         state = make_initial_state()
         state["ts_trial"] = MAX_TS_TRIALS
         assert route_after_ted_tb(state) == "end_fail_ts"
-
-    def test_route_after_patcher_under_limit(self):
-        state = make_initial_state()
-        state["total_iter"] = 5
-        assert route_after_patcher(state) == "node_syntax_check"
-
-    def test_route_after_patcher_at_limit(self):
-        state = make_initial_state()
-        state["total_iter"] = MAX_TOTAL_ITER
-        assert route_after_patcher(state) == "end_max_iter"
-
-    def test_route_after_ted_syntax_no_exception(self):
-        """When TED finds no parseable error, route to TB instead of debugger."""
-        state = make_initial_state()
-        state["sc_exception"] = None
-        state["sc_trial"] = 3
-        assert route_after_ted_syntax(state) == "node_tb_sim"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -174,16 +204,66 @@ class TestNodes:
         result = nodes.node_converter(state)
         assert result == {}  # no changes
 
-    def test_node_generator(self):
+    def test_node_generator_outputs_raw(self):
+        """v3: Generator outputs _raw_llm_output instead of gvd directly."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
         state["xml_description"] = GOOD_XML
         state["module_name"] = "adder_8bit"
         result = nodes.node_generator(state)
-        assert result["gvd"] is not None
+        assert result["_raw_llm_output"] is not None
+        assert result["_last_llm_source"] == "generator"
+        assert result["multi_attempt_mgr"] is not None
+        assert "gvd" not in result  # v3: no direct gvd assignment
+
+    def test_node_extraction_guard_success(self):
+        """ExtractionGuard succeeds with valid Verilog."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["_raw_llm_output"] = GOOD_VERILOG
+        state["module_name"] = "adder_8bit"
+        state["_last_llm_source"] = "generator"
+        result = nodes.node_extraction_guard(state)
+        assert result["extraction_result"]["success"] is True
+        assert "gvd" in result
         assert "module adder_8bit" in result["gvd"]
-        assert result["sgvd"] == result["gvd"]
+        assert result.get("sgvd") is not None  # set sgvd for generator
+
+    def test_node_extraction_guard_failure(self):
+        """ExtractionGuard fails with non-Verilog text."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["_raw_llm_output"] = "I cannot generate this code."
+        state["module_name"] = "adder_8bit"
+        state["_last_llm_source"] = "generator"
+        result = nodes.node_extraction_guard(state)
+        assert result["extraction_result"]["success"] is False
+        assert result["extraction_result"]["retry_prompt"] is not None
+        assert "gvd" not in result  # gvd not updated on failure
+
+    def test_node_pre_sc_check_passes_clean_code(self):
+        """PreSCCheck passes for clean Verilog."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["gvd"] = GOOD_VERILOG
+        state["module_name"] = "adder_8bit"
+        result = nodes.node_pre_sc_check(state)
+        assert result["pre_sc_result"]["passed"] is True
+
+    def test_node_pre_sc_check_detects_issues(self):
+        """PreSCCheck detects structural issues."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        # Code missing endmodule — should be caught
+        state["gvd"] = "module test(input a, output b);\n  assign b = a;\n"
+        state["module_name"] = "test"
+        result = nodes.node_pre_sc_check(state)
+        assert result["pre_sc_result"]["fatal_count"] > 0
 
     def test_node_syntax_check_clean(self):
         llm = create_stub_llm()
@@ -251,8 +331,8 @@ class TestNodes:
         # After exceeding limit, EDP should contain EDTM warning
         assert "EDTM WARNING" in result["edp"]
 
-    def test_node_debugger(self):
-        """Test debugger outputs JSON patch instead of full code."""
+    def test_node_debugger_outputs_raw_v3(self):
+        """v3: Debugger outputs _raw_llm_output via MultiAttemptManager."""
         llm = create_buggy_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
@@ -264,57 +344,13 @@ class TestNodes:
         state["sc_exception"] = "%Error: Signal 'result' not found"
         state["edp"] = "Topmost Verilator error:\n%Error: Signal 'result' not found"
         state["sc_log"] = "%Error: adder_8bit.v:8: Signal 'result' not found\n"
+        state["nl_input"] = "Design an 8-bit adder"
 
         result = nodes.node_debugger(state)
-        assert result["debugger_patch"] is not None
-        assert "buggy_code" in result["debugger_patch"]
-        assert "correct_code" in result["debugger_patch"]
-
-    def test_node_patcher_exact_match(self):
-        """Test patcher applies patch when buggy_code is found exactly."""
-        llm = create_stub_llm()
-        nodes = COMBANodes(llm)
-        state = make_initial_state()
-        state["gvd"] = BUGGY_VERILOG
-        state["sc_exception_count"] = 1
-        state["debugger_patch"] = {
-            "buggy_code": "assign result = a + b + cin;",
-            "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;",
-        }
-
-        result = nodes.node_patcher(state)
-        assert result["gvd"] is not None
-        assert result["sgvd"] == BUGGY_VERILOG  # snapshot saved
-        assert result["rollback_triggered"] is False
-        assert "wire [8:0] result;" in result["gvd"]
-
-    def test_node_patcher_no_match(self):
-        """Test patcher skips when buggy_code is not found."""
-        llm = create_stub_llm()
-        nodes = COMBANodes(llm)
-        state = make_initial_state()
-        state["gvd"] = GOOD_VERILOG
-        state["sc_exception_count"] = 0
-        state["debugger_patch"] = {
-            "buggy_code": "nonexistent code snippet",
-            "correct_code": "replacement code",
-        }
-
-        result = nodes.node_patcher(state)
-        assert result["rollback_triggered"] is True
-        assert "gvd" not in result  # GVD not changed
-
-    def test_node_patcher_no_patch(self):
-        """Test patcher handles None patch gracefully."""
-        llm = create_stub_llm()
-        nodes = COMBANodes(llm)
-        state = make_initial_state()
-        state["gvd"] = BUGGY_VERILOG
-        state["sc_exception_count"] = 1
-        state["debugger_patch"] = None
-
-        result = nodes.node_patcher(state)
-        assert result["rollback_triggered"] is True
+        assert result["_raw_llm_output"] is not None
+        assert result["_last_llm_source"] == "debugger"
+        assert result["multi_attempt_mgr"] is not None
+        assert result["escalation_level"] is not None
 
     def test_node_ted_tb_extracts_todo_failure(self):
         llm = create_stub_llm()
@@ -367,7 +403,7 @@ class TestE2EGraph:
 
         with patch("comba_pipeline.subprocess.run", side_effect=mock_subprocess_run):
             with patch("comba_pipeline.shutil.copy2"):  # skip file copy
-                result = graph.invoke(state, {"recursion_limit": 100})
+                result = graph.invoke(state, {"recursion_limit": 150})
 
         return result
 
@@ -388,7 +424,7 @@ class TestE2EGraph:
         assert result["ts_trial"] == 1
 
     def test_sc_fix_then_pass(self):
-        """SC fails → TED → Debugger → Patcher fixes → SC passes → TB passes."""
+        """SC fails → TED → Debugger → ExtractionGuard → PreSC → SC passes → TB passes."""
         llm = create_buggy_stub_llm()
         result = self._run_graph(
             llm,
@@ -414,24 +450,6 @@ class TestE2EGraph:
         assert result["final_status"] == "fail_sc"
         assert result["sc_trial"] >= MAX_SC_TRIALS
 
-    def test_rollback_preserves_sgvd(self):
-        """When patcher is called, sgvd is saved for potential rollback."""
-        llm = create_buggy_stub_llm()
-        nodes = COMBANodes(llm)
-        state = make_initial_state()
-        state["gvd"] = BUGGY_VERILOG
-        state["sc_exception_count"] = 1
-        state["phase"] = "sc"
-        state["debugger_patch"] = {
-            "buggy_code": "assign result = a + b + cin;",
-            "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;",
-        }
-
-        result = nodes.node_patcher(state)
-        # sgvd should be the original buggy code (saved before fix)
-        assert result["sgvd"] == BUGGY_VERILOG
-        assert result["gvd"] != result["sgvd"]  # new code is different
-
     def test_graph_compiles_and_has_correct_nodes(self):
         """Verify the graph structure is correct."""
         llm = create_stub_llm()
@@ -452,14 +470,15 @@ class TestE2EGraph:
         else:
             node_ids = []
 
-        # Check all expected nodes exist (8 pipeline + 4 terminal = 12)
+        # Check all expected nodes exist (9 pipeline + 4 terminal = 13)
         expected_nodes = [
             "node_converter",
             "node_generator",
+            "node_extraction_guard",   # v3 NEW
+            "node_pre_sc_check",       # v3 NEW
             "node_syntax_check",
             "node_ted_syntax",
             "node_debugger",
-            "node_patcher",
             "node_tb_sim",
             "node_ted_tb",
             "end_pass",
@@ -469,6 +488,9 @@ class TestE2EGraph:
         ]
         for expected in expected_nodes:
             assert expected in node_ids, f"Missing node: {expected}"
+
+        # node_patcher should NOT be in the graph (removed in v3)
+        assert "node_patcher" not in node_ids, "node_patcher should not be in v3 graph"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -531,11 +553,55 @@ class TestState:
         assert state["edtm"] == {}
         assert state["final_status"] is None
         assert state["debugger_patch"] is None
+        # v3 new fields
+        assert state["extraction_result"] is None
+        assert state["pre_sc_result"] is None
+        assert state["multi_attempt_mgr"] is None
+        assert state["escalation_level"] is None
+        assert state["_last_llm_source"] is None
+        assert state["_raw_llm_output"] is None
 
     def test_initial_state_with_args(self):
         state = make_initial_state(nl_input="test", module_name="foo")
         assert state["nl_input"] == "test"
         assert state["module_name"] == "foo"
+
+
+# ──────────────────────────────────────────────────────────────
+# Test 6: ExtractionGuard integration
+# ──────────────────────────────────────────────────────────────
+
+class TestExtractionGuard:
+    """Test ExtractionGuard node behavior."""
+
+    def test_guard_extracts_from_markdown_fence(self):
+        """Guard extracts code from ```verilog ... ``` fences."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["module_name"] = "adder_8bit"
+        state["_last_llm_source"] = "generator"
+        state["_raw_llm_output"] = (
+            "Here is the Verilog code:\n\n"
+            "```verilog\n"
+            + GOOD_VERILOG +
+            "\n```\n\n"
+            "This implements an 8-bit adder."
+        )
+        result = nodes.node_extraction_guard(state)
+        assert result["extraction_result"]["success"] is True
+        assert "module adder_8bit" in result["gvd"]
+
+    def test_guard_rejects_empty_output(self):
+        """Guard rejects empty LLM output."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["module_name"] = "test"
+        state["_last_llm_source"] = "generator"
+        state["_raw_llm_output"] = ""
+        result = nodes.node_extraction_guard(state)
+        assert result["extraction_result"]["success"] is False
 
 
 if __name__ == "__main__":

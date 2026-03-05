@@ -1,19 +1,23 @@
 """
-COMBA-PROMPT Full Verification Pipeline v2 — LangGraph Implementation.
+COMBA-PROMPT Full Verification Pipeline v3 — LangGraph Implementation.
 
-8 nodes, 6 conditional edges, Rollback Manager, EDTM, Iteration Control.
+10 nodes, 8 conditional edges, Rollback Manager, EDTM, Iteration Control.
+ExtractionGuard + PreSCCheck + MultiAttemptManager inserted between LLM calls
+and Verilator.
 
 Flow:
-  NL → [Converter] → XML → [Generator] → Verilog (GVD)
+  NL → [Converter] → XML → [Generator] → [ExtractionGuard] → [PreSCCheck]
     → [SC] → pass? → [TB] → pass? → END ✅
               ↓ fail          ↓ fail
-         [TED_SC]→[Debugger]→[Patcher]→[SC]  (loop)
-                          [TED_TB]→[Debugger]→[Patcher]→[SC]  (loop)
+         [TED_SC]→[Debugger]→[ExtractionGuard]→[PreSCCheck]→[SC]  (loop)
+                          [TED_TB]→[Debugger]→[ExtractionGuard]→[PreSCCheck]→[SC]  (loop)
 
-v2 Changes:
-  - Correcter → Debugger: outputs JSON patch {buggy_code, correct_code}
-  - New Patch Applier node: applies JSON patch with fuzzy match + rollback
-  - 6 routing decisions (was 5)
+v3 Changes:
+  - ExtractionGuard: validates LLM output before assigning GVD
+  - PreSCCheck: structural validation before Verilator (saves compile time)
+  - MultiAttemptManager: escalating correction prompts (L0→L4)
+  - Debugger: delegates prompt building to MultiAttemptManager
+  - 3 new conditional edges for extraction/pre-SC routing
 
 Usage:
   # With real LLM
@@ -40,6 +44,9 @@ from prompts import (
     edpPromptTemplate,
     tdpPromptTemplate,
 )
+from extraction_guard import ExtractionGuard
+from pre_sc_check import PreSCValidator
+from multi_attempt import MultiAttemptManager
 
 # ──────────────────────────────────────────────────────────────
 # Configuration Constants
@@ -66,6 +73,7 @@ class COMBAState(TypedDict):
     # ── Generated Verilog ──
     gvd: Optional[str]                         # Generated Verilog Description (current)
     sgvd: Optional[str]                        # Saved GVD (rollback snapshot)
+    _raw_llm_output: Optional[str]             # Raw LLM output before extraction
 
     # ── Syntax Check (SC) ──
     sc_log: Optional[str]                      # SC raw log output
@@ -92,6 +100,13 @@ class COMBAState(TypedDict):
     # ── Debugger Output ──
     debugger_patch: Optional[dict]             # JSON {buggy_code, correct_code} from Debugger
 
+    # ── v3: ExtractionGuard / PreSCCheck / MultiAttempt ──
+    extraction_result: Optional[dict]          # ExtractionGuard output
+    pre_sc_result: Optional[dict]              # PreSCCheck output
+    multi_attempt_mgr: Optional[object]        # MultiAttemptManager instance
+    escalation_level: Optional[str]            # L0→L4 per current error_key
+    _last_llm_source: Optional[str]            # "generator" or "debugger" — for routing
+
     # ── Result ──
     final_status: Optional[str]                # "pass", "fail_sc", "fail_ts", "max_iter"
     error: Optional[str]                       # Runtime error message
@@ -106,6 +121,7 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         module_name=module_name or None,
         gvd=None,
         sgvd=None,
+        _raw_llm_output=None,
         sc_log=None,
         sc_exception=None,
         sc_exception_count=0,
@@ -121,6 +137,11 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         total_iter=0,
         rollback_triggered=False,
         debugger_patch=None,
+        extraction_result=None,
+        pre_sc_result=None,
+        multi_attempt_mgr=None,
+        escalation_level=None,
+        _last_llm_source=None,
         final_status=None,
         error=None,
         work_dir=None,
@@ -128,11 +149,14 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
 
 
 # ──────────────────────────────────────────────────────────────
-# 2. Eight Nodes
+# 2. Ten Nodes
 # ──────────────────────────────────────────────────────────────
 class COMBANodes:
     """
-    Encapsulates the 8 pipeline nodes (v2).
+    Encapsulates the 10 pipeline nodes (v3).
+
+    Nodes: converter, generator, extraction_guard, pre_sc_check,
+           syntax_check, ted_syntax, debugger, patcher, tb_sim, ted_tb.
 
     Args:
         llm: A LangChain-compatible chat model (or StubLLM for testing).
@@ -140,6 +164,8 @@ class COMBANodes:
 
     def __init__(self, llm):
         self._llm = llm
+        self._extraction_guard = ExtractionGuard()
+        self._pre_sc_validator = PreSCValidator()
 
     # ──────────────────────────────────────────────────────────
     # Node 1: Converter — NL → XML
@@ -182,12 +208,13 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 2: Generator — XML → Verilog
+    # Node 2: Generator — XML → raw LLM output
     # ──────────────────────────────────────────────────────────
     def node_generator(self, state: COMBAState) -> dict:
-        """Generate Verilog code from COMBA XML description."""
+        """Generate Verilog code from COMBA XML description.
+        Outputs raw LLM text → routed to extraction_guard."""
         print("\n" + "=" * 60)
-        print("⚡ NODE: Generator (XML → Verilog)")
+        print("⚡ NODE: Generator (XML → raw LLM output)")
         print("=" * 60)
 
         xml_desc = state["xml_description"]
@@ -196,25 +223,111 @@ class COMBANodes:
             "conversation": [],
         })
         response = self._llm.invoke(result)
-        content = response.content.strip()
+        raw_output = response.content.strip()
 
-        # Extract Verilog code — try JSON first, fallback to markdown/raw
-        code = self._extract_verilog(content)
+        print(f"  ✅ LLM returned {len(raw_output.splitlines())} lines")
 
-        # Ensure trailing newline (Verilator EOFNEWLINE)
-        if code and not code.endswith("\n"):
-            code += "\n"
-
-        print(f"  ✅ Generated {len(code.splitlines())} lines of Verilog")
+        # Initialize MultiAttemptManager on first entry
+        mgr = state.get("multi_attempt_mgr")
+        if mgr is None:
+            mgr = MultiAttemptManager()
 
         return {
-            "gvd": code,
-            "sgvd": code,          # initial snapshot for rollback
+            "_raw_llm_output": raw_output,
+            "_last_llm_source": "generator",
             "phase": "sc",
             "sc_trial": 0,
             "ts_trial": 0,
             "total_iter": 0,
+            "multi_attempt_mgr": mgr,
         }
+
+    # ──────────────────────────────────────────────────────────
+    # Node 2a: Extraction Guard — validate raw LLM output
+    # ──────────────────────────────────────────────────────────
+    def node_extraction_guard(self, state: COMBAState) -> dict:
+        """Run ExtractionGuard on raw LLM output.
+        Validates and extracts clean Verilog from _raw_llm_output."""
+        print("\n" + "=" * 60)
+        print("🛡️ NODE: Extraction Guard")
+        print("=" * 60)
+
+        raw = state.get("_raw_llm_output") or ""
+        module_name = state.get("module_name")
+
+        result = self._extraction_guard.extract(raw, module_name)
+
+        extraction_dict = {
+            "success": result.success,
+            "code": result.code,
+            "failure_reason": result.failure_reason.value if result.failure_reason else None,
+            "retry_prompt": result.retry_prompt,
+            "warnings": result.warnings,
+        }
+
+        updates = {
+            "extraction_result": extraction_dict,
+        }
+
+        if result.success:
+            code = result.code
+            # Ensure trailing newline
+            if code and not code.endswith("\n"):
+                code += "\n"
+            updates["gvd"] = code
+            # Set sgvd on first generation (from generator)
+            if state.get("_last_llm_source") == "generator":
+                updates["sgvd"] = code
+            print(f"  ✅ Extraction success: {len(code.splitlines())} lines")
+            if result.warnings:
+                for w in result.warnings:
+                    print(f"  ⚠️ Warning: {w}")
+        else:
+            print(f"  ❌ Extraction failed: {result.failure_reason}")
+            print(f"  📝 Retry prompt: {(result.retry_prompt or '')[:80]}...")
+
+        return updates
+
+    # ──────────────────────────────────────────────────────────
+    # Node 2b: Pre-SC Check — structural validation before Verilator
+    # ──────────────────────────────────────────────────────────
+    def node_pre_sc_check(self, state: COMBAState) -> dict:
+        """Run PreSCValidator before Verilator.
+        Catches obvious structural issues, optionally auto-fixes."""
+        print("\n" + "=" * 60)
+        print("🔬 NODE: Pre-SC Check")
+        print("=" * 60)
+
+        gvd = state["gvd"]
+        module_name = state.get("module_name")
+
+        result = self._pre_sc_validator.validate(gvd, module_name)
+
+        pre_sc_dict = {
+            "passed": result.passed,
+            "fatal_count": result.fatal_count,
+            "warning_count": result.warning_count,
+            "auto_fixed_code": result.auto_fixed_code,
+            "auto_fix_prompt": result.auto_fix_prompt,
+        }
+
+        updates = {
+            "pre_sc_result": pre_sc_dict,
+        }
+
+        if result.auto_fixed_code:
+            # Auto-fix applied — update GVD
+            updates["gvd"] = result.auto_fixed_code
+            print(f"  🔧 Auto-fixed {result.fatal_count} issue(s)")
+        elif result.passed:
+            print(f"  ✅ Pre-SC passed (warnings: {result.warning_count})")
+        else:
+            print(f"  ❌ Pre-SC failed: {result.fatal_count} fatal, {result.warning_count} warnings")
+            for issue in result.issues:
+                if issue.severity.value == "fatal":
+                    print(f"     FATAL: {issue.description}")
+
+        return updates
 
     # ──────────────────────────────────────────────────────────
     # Node 3: Syntax Check — Verilator --lint-only
@@ -347,14 +460,13 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 5a: Debugger — LLM #2 → JSON patch {buggy_code, correct_code}
+    # Node 5a: Debugger — LLM #2 → raw output → extraction_guard
     # ──────────────────────────────────────────────────────────
     def node_debugger(self, state: COMBAState) -> dict:
         """
-        Debugger node (v2).
-        Takes EDP (SC phase) or TDP (TS phase) + current GVD.
-        LLM returns JSON: {"buggy_code": "...", "correct_code": "..."}.
-        Rollback logic is now in node_patcher.
+        Debugger node (v3).
+        Delegates prompt building to MultiAttemptManager.
+        Outputs raw LLM text → routed to extraction_guard.
         """
         print("\n" + "=" * 60)
         print(f"🐛 NODE: Debugger (phase={state['phase']})")
@@ -363,39 +475,60 @@ class COMBANodes:
         phase = state["phase"]
         current_gvd = state["gvd"]
         error_desc = state["edp"] if phase == "sc" else state["tdp"]
+        module_name = state.get("module_name", "unknown")
 
         if not error_desc:
             print("  ⚠️ No error description available, skipping")
             return {}
 
-        # ── Call LLM to produce JSON patch ──
+        # ── Get or create MultiAttemptManager ──
+        mgr = state.get("multi_attempt_mgr")
+        if mgr is None:
+            mgr = MultiAttemptManager()
+
+        # ── Build error_key for escalation tracking ──
+        error_key = re.sub(r':\d+:', ':N:', error_desc.split('\n')[0])
+        error_key = re.sub(r'\s+', ' ', error_key).strip()[:100]
+
+        # ── Get escalation level ──
+        esc_level = mgr.get_escalation_level(error_key)
+        print(f"  📊 Escalation: L{esc_level} for key: {error_key[:60]}")
+
+        # ── Build prompt via MultiAttemptManager ──
         if phase == "sc":
-            result = edpPromptTemplate.invoke({
-                "module_name": state.get("module_name", "unknown"),
-                "sc_trial": state["sc_trial"],
-                "max_sc_trials": MAX_SC_TRIALS,
-                "verilog_code": current_gvd,
-                "topmost_error": state.get("sc_exception", error_desc),
-                "sc_log": (state.get("sc_log") or "")[:2000],
-            })
+            prompt_text = mgr.build_sc_prompt(
+                error_key=error_key,
+                module_name=module_name,
+                gvd=current_gvd,
+                exception_type="syntax_error",
+                exception_title=state.get("sc_exception", error_desc)[:200],
+                exception_content=error_desc,
+                log_content=(state.get("sc_log") or "")[:2000],
+                task_description=state.get("nl_input", ""),
+            )
         else:
             traces = ""
             if error_desc and "Debug traces:" in error_desc:
                 traces = error_desc.split("Debug traces:")[-1].strip()
-            result = tdpPromptTemplate.invoke({
-                "module_name": state.get("module_name", "unknown"),
-                "ts_trial": state["ts_trial"],
-                "max_ts_trials": MAX_TS_TRIALS,
-                "verilog_code": current_gvd,
-                "topmost_failure": state.get("tb_failure", error_desc),
-                "debug_traces": traces or "(no traces available)",
-            })
+            prompt_text = mgr.build_ts_prompt(
+                error_key=error_key,
+                module_name=module_name,
+                gvd=current_gvd,
+                todo_num=0,
+                trace_content=traces or "(no traces available)",
+                failure_content=state.get("tb_failure", error_desc),
+                task_description=state.get("nl_input", ""),
+            )
+
+        # ── Call LLM ──
+        from langchain_core.messages import HumanMessage
+        messages = [HumanMessage(content=prompt_text)]
 
         # Switch to LoRA if available
         if hasattr(self._llm, 'switch_to_lora'):
             self._llm.switch_to_lora()
 
-        response = self._llm.invoke(result)
+        response = self._llm.invoke(messages)
 
         # Switch back to base
         if hasattr(self._llm, 'switch_to_base'):
@@ -403,18 +536,21 @@ class COMBANodes:
 
         raw_output = response.content.strip()
 
-        # Parse JSON patch from response
-        patch = self._parse_debugger_json(raw_output)
+        # Record attempt for escalation
+        mgr.record_attempt(
+            error_key=error_key,
+            phase="sc" if phase == "sc" else "ts",
+            error_detail=error_desc[:500],
+            code_snapshot=current_gvd[:1000] if current_gvd else "",
+        )
 
-        if patch:
-            print(f"  ✅ Debugger produced JSON patch")
-            print(f"     buggy_code: {patch['buggy_code'][:60]}...")
-            print(f"     correct_code: {patch['correct_code'][:60]}...")
-        else:
-            print("  ⚠️ Debugger failed to produce valid JSON patch")
+        print(f"  ✅ Debugger LLM returned {len(raw_output.splitlines())} lines")
 
         return {
-            "debugger_patch": patch,
+            "_raw_llm_output": raw_output,
+            "_last_llm_source": "debugger",
+            "multi_attempt_mgr": mgr,
+            "escalation_level": f"L{esc_level}",
         }
 
     # ──────────────────────────────────────────────────────────
@@ -779,8 +915,29 @@ class COMBANodes:
 
 
 # ──────────────────────────────────────────────────────────────
-# 3. Six Conditional Edges (Routing Functions)
+# 3. Eight Conditional Edges (Routing Functions)
 # ──────────────────────────────────────────────────────────────
+
+def route_after_extraction_guard(state: COMBAState) -> str:
+    """Route Ⓕ: After ExtractionGuard — success? → pre_sc, fail → re-query."""
+    result = state.get("extraction_result", {})
+    if result.get("success"):
+        return "node_pre_sc_check"
+    # Extraction failed — re-query the source (generator or debugger)
+    source = state.get("_last_llm_source", "generator")
+    if source == "debugger":
+        return "node_debugger"
+    return "node_generator"
+
+
+def route_after_pre_sc_check(state: COMBAState) -> str:
+    """Route Ⓖ: After PreSCCheck — passed/auto-fixed → SC, fail → re-query."""
+    result = state.get("pre_sc_result", {})
+    if result.get("passed") or result.get("auto_fixed_code"):
+        return "node_syntax_check"
+    # Pre-SC failed, not auto-fixable → re-query debugger
+    return "node_debugger"
+
 
 def route_after_sc(state: COMBAState) -> str:
     """Route Ⓐ: After Syntax Check — has errors? → TED_SC, else → TB."""
@@ -797,27 +954,43 @@ def route_after_ts(state: COMBAState) -> str:
 
 
 def route_after_ted_syntax(state: COMBAState) -> str:
-    """Route Ⓒ: After TED Syntax — no error → TB, limit → fail, else → debugger."""
+    """Route Ⓒ: After TED Syntax — no error → TB, limit/give-up → fail, else → debugger."""
     # If TED couldn't parse any error, skip debugger → go directly to TB
     if not state.get("sc_exception"):
         return "node_tb_sim"
     if state["sc_trial"] >= MAX_SC_TRIALS:
         return "end_fail_sc"
+    # Check MultiAttemptManager.should_give_up if available
+    mgr = state.get("multi_attempt_mgr")
+    if mgr is not None:
+        error_key = re.sub(r':\d+:', ':N:', (state.get("sc_exception") or ""))
+        error_key = re.sub(r'\s+', ' ', error_key).strip()[:100]
+        if mgr.should_give_up(error_key):
+            print(f"  ⛔ MultiAttempt: giving up on error_key: {error_key[:50]}")
+            return "end_fail_sc"
     return "node_debugger"
 
 
 def route_after_ted_tb(state: COMBAState) -> str:
-    """Route Ⓓ: After TED TB — TS trial limit → debugger or fail."""
+    """Route Ⓓ: After TED TB — TS trial limit or give-up → fail, else → debugger."""
     if state["ts_trial"] >= MAX_TS_TRIALS:
         return "end_fail_ts"
+    # Check MultiAttemptManager.should_give_up if available
+    mgr = state.get("multi_attempt_mgr")
+    if mgr is not None:
+        tb_failure = state.get("tb_failure", "")
+        error_key = re.sub(r'\s+', ' ', tb_failure).strip()[:100]
+        if mgr.should_give_up(error_key):
+            print(f"  ⛔ MultiAttempt: giving up on TB error: {error_key[:50]}")
+            return "end_fail_ts"
     return "node_debugger"
 
 
 def route_after_patcher(state: COMBAState) -> str:
-    """Route Ⓔ: After Patcher — total iteration limit → SC or fail."""
+    """Route Ⓔ: After Patcher — total iteration limit → extraction_guard or fail."""
     if state["total_iter"] >= MAX_TOTAL_ITER:
         return "end_max_iter"
-    return "node_syntax_check"
+    return "node_extraction_guard"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -854,22 +1027,22 @@ def end_max_iter(state: COMBAState) -> dict:
 
 def build_comba_graph(llm):
     """
-    Build the full COMBA verification pipeline v2 as a LangGraph.
+    Build the full COMBA verification pipeline v3 as a LangGraph.
 
     Graph topology:
-        START → converter → generator → syntax_check
-               ┌──────────────────────────────────────────┐
-               ↓                                          │
-        syntax_check ──(pass)──→ tb_sim                   │
-               │                   │                      │
-               ↓ (fail)            ↓ (fail)               │
-        ted_syntax            ted_tb                      │
-               │                   │                      │
-               ↓                   ↓                      │
-        debugger ──→ patcher ─────────────────────────────┘
-                       │
-                       ↓ (max_iter)
-                      END
+        START → converter → generator → extraction_guard → pre_sc_check
+               ┌───────────────────────────────────────────────────────┐
+               ↓                                                      │
+        syntax_check ──(pass)──→ tb_sim                               │
+               │                   │                                  │
+               ↓ (fail)            ↓ (fail)                           │
+        ted_syntax            ted_tb                                  │
+               │                   │                                  │
+               ↓                   ↓                                  │
+        debugger → extraction_guard → pre_sc_check → syntax_check ────┘
+                                        │
+                                        ↓ (max_iter)
+                                       END
 
     Args:
         llm: LangChain-compatible chat model.
@@ -881,13 +1054,14 @@ def build_comba_graph(llm):
 
     builder = StateGraph(COMBAState)
 
-    # ── Add all 8 pipeline nodes ──
+    # ── Add all 10 pipeline nodes ──
     builder.add_node("node_converter", nodes.node_converter)
     builder.add_node("node_generator", nodes.node_generator)
+    builder.add_node("node_extraction_guard", nodes.node_extraction_guard)
+    builder.add_node("node_pre_sc_check", nodes.node_pre_sc_check)
     builder.add_node("node_syntax_check", nodes.node_syntax_check)
     builder.add_node("node_ted_syntax", nodes.node_ted_syntax)
     builder.add_node("node_debugger", nodes.node_debugger)
-    builder.add_node("node_patcher", nodes.node_patcher)
     builder.add_node("node_tb_sim", nodes.node_tb_sim)
     builder.add_node("node_ted_tb", nodes.node_ted_tb)
 
@@ -900,8 +1074,8 @@ def build_comba_graph(llm):
     # ── Linear edges ──
     builder.add_edge(START, "node_converter")
     builder.add_edge("node_converter", "node_generator")
-    builder.add_edge("node_generator", "node_syntax_check")
-    builder.add_edge("node_debugger", "node_patcher")    # always: debugger → patcher
+    builder.add_edge("node_generator", "node_extraction_guard")  # v3: → guard first
+    builder.add_edge("node_debugger", "node_extraction_guard")   # v3: debugger → guard (was debugger → patcher)
 
     # Terminal → END
     builder.add_edge("end_pass", END)
@@ -909,7 +1083,29 @@ def build_comba_graph(llm):
     builder.add_edge("end_fail_ts", END)
     builder.add_edge("end_max_iter", END)
 
-    # ── Conditional edges (6 routing decisions) ──
+    # ── Conditional edges (8 routing decisions) ──
+
+    # v3 NEW: After extraction guard → pre_sc or re-query
+    builder.add_conditional_edges(
+        "node_extraction_guard",
+        route_after_extraction_guard,
+        {
+            "node_pre_sc_check": "node_pre_sc_check",
+            "node_generator": "node_generator",
+            "node_debugger": "node_debugger",
+        },
+    )
+
+    # v3 NEW: After pre-SC check → syntax_check or re-query
+    builder.add_conditional_edges(
+        "node_pre_sc_check",
+        route_after_pre_sc_check,
+        {
+            "node_syntax_check": "node_syntax_check",
+            "node_debugger": "node_debugger",
+        },
+    )
+
     builder.add_conditional_edges(
         "node_syntax_check",
         route_after_sc,
@@ -932,12 +1128,6 @@ def build_comba_graph(llm):
         "node_ted_tb",
         route_after_ted_tb,
         {"node_debugger": "node_debugger", "end_fail_ts": "end_fail_ts"},
-    )
-
-    builder.add_conditional_edges(
-        "node_patcher",
-        route_after_patcher,
-        {"node_syntax_check": "node_syntax_check", "end_max_iter": "end_max_iter"},
     )
 
     return builder.compile()
