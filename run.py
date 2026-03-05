@@ -21,15 +21,34 @@ try:
     LEGACY_AVAILABLE = True
 except ImportError:
     LEGACY_AVAILABLE = False
-    # Minimal stubs so argparse doesn't fail
+    # Minimal stubs so function defaults don't fail at definition time
+    class _Enum:
+        def __init__(self, val): self.value = val
     class _Commands:
-        CREATEMODULE = type('', (), {'value': 'createmodule'})()
-        RUNWORK = type('', (), {'value': 'runwork'})()
-        RUNGENERIC = type('', (), {'value': 'rungeneric'})()
-        MAKEWORK = type('', (), {'value': 'makework'})()
-        GENERATE = type('', (), {'value': 'generate'})()
-        RAG = type('', (), {'value': 'rag'})()
+        CREATEMODULE = _Enum('createmodule')
+        RUNWORK = _Enum('runwork')
+        RUNGENERIC = _Enum('rungeneric')
+        MAKEWORK = _Enum('makework')
+        GENERATE = _Enum('generate')
+        RAG = _Enum('rag')
     Commands = _Commands()
+    class _Template:
+        MODULEFOLDER = _Enum('modules')
+        TEMPLATEFOLDER = _Enum('templates')
+        DESCRIPTIONFILENAME = _Enum('design_description.txt')
+        DESCRIPTIONXMLFILENAME = _Enum('design_description.xml')
+        TBFILENAME = _Enum('tb.txt')
+        MODULEFILENAME = _Enum('module.v')
+        CATEGORYFILENAME = _Enum('category')
+        LLMCACHEFOLDER = _Enum('.llm_cache')
+        TEMPORARYWORKFOLDERNAME = _Enum('_work')
+        TEMPORARYLLMWORKFOLDERNAME = _Enum('_llm_work')
+        MEIC_TEMPORARYWORKFOLDERNAME = _Enum('_meic_work')
+    Template = _Template()
+    class _ModuleNamePrefix:
+        VERIFIED = _Enum('verified_')
+        LLM = _Enum('llm_')
+    ModuleNamePrefix = _ModuleNamePrefix()
 
 try:
     from tqdm import tqdm
