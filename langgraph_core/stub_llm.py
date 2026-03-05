@@ -13,6 +13,7 @@ Usage:
 """
 
 from typing import Any, List, Optional
+import json
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
@@ -89,11 +90,21 @@ module adder_8bit(
 endmodule
 """
 
-DEBUGGER_PATCH_FIXED = '{"buggy_code": "assign result = a + b + cin;", "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;"}'
+# Use json.dumps() to guarantee correct JSON escaping of newlines
+DEBUGGER_PATCH_FIXED = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;"
+})
 
-DEBUGGER_PATCH_BUGGY = '{"buggy_code": "assign result = a + b + cin;", "correct_code": "assign result = a + b + cin;"}'
+DEBUGGER_PATCH_BUGGY = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "assign result = a + b + cin;"
+})
 
-DEBUGGER_PATCH_WORSE = '{"buggy_code": "assign result = a + b + cin;", "correct_code": "assign result = a + b + cin;\n    assign sum = unknown_signal;\n    assign cout = another_undeclared;"}'
+DEBUGGER_PATCH_WORSE = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "assign result = a + b + cin;\n    assign sum = unknown_signal;\n    assign cout = another_undeclared;"
+})
 
 
 # ──────────────────────────────────────────────────────────────
