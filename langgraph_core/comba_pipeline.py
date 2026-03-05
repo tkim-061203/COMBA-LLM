@@ -1,23 +1,22 @@
 """
 COMBA-PROMPT Full Verification Pipeline v3 — LangGraph Implementation.
 
-10 nodes, 8 conditional edges, Rollback Manager, EDTM, Iteration Control.
-ExtractionGuard + PreSCCheck + MultiAttemptManager inserted between LLM calls
-and Verilator.
+9 nodes, 7 conditional edges, Rollback Manager, EDTM, Iteration Control.
+VerilogSanitizer + MultiAttemptManager inserted between LLM calls and Verilator.
 
 Flow:
-  NL → [Converter] → XML → [Generator] → [ExtractionGuard] → [PreSCCheck]
+  NL → [Converter] → XML → [Generator] → [Sanitizer]
     → [SC] → pass? → [TB] → pass? → END ✅
               ↓ fail          ↓ fail
-         [TED_SC]→[Debugger]→[ExtractionGuard]→[PreSCCheck]→[SC]  (loop)
-                          [TED_TB]→[Debugger]→[ExtractionGuard]→[PreSCCheck]→[SC]  (loop)
+         [TED_SC]→[Debugger]→[Sanitizer]→[SC]  (loop)
+                          [TED_TB]→[Debugger]→[Sanitizer]→[SC]  (loop)
 
 v3 Changes:
-  - ExtractionGuard: validates LLM output before assigning GVD
-  - PreSCCheck: structural validation before Verilator (saves compile time)
+  - VerilogSanitizer: extracts code from LLM noise, auto-fixes trivial issues,
+    collects structural warnings. NEVER blocks — code always reaches Verilator.
   - MultiAttemptManager: escalating correction prompts (L0→L4)
   - Debugger: delegates prompt building to MultiAttemptManager
-  - 3 new conditional edges for extraction/pre-SC routing
+  - 1 new conditional edge for sanitizer routing
 
 Usage:
   # With real LLM
@@ -44,8 +43,7 @@ from prompts import (
     edpPromptTemplate,
     tdpPromptTemplate,
 )
-from extraction_guard import ExtractionGuard
-from pre_sc_check import PreSCValidator
+from verilog_sanitizer import sanitize as verilog_sanitize
 from multi_attempt import MultiAttemptManager
 
 # ──────────────────────────────────────────────────────────────
@@ -100,9 +98,9 @@ class COMBAState(TypedDict):
     # ── Debugger Output ──
     debugger_patch: Optional[dict]             # JSON {buggy_code, correct_code} from Debugger
 
-    # ── v3: ExtractionGuard / PreSCCheck / MultiAttempt ──
-    extraction_result: Optional[dict]          # ExtractionGuard output
-    pre_sc_result: Optional[dict]              # PreSCCheck output
+    # ── v3: Sanitizer / MultiAttempt ──
+    sanitize_result: Optional[dict]            # VerilogSanitizer output {code, warnings, needs_retry, ...}
+    _sanitize_retry_count: int                 # Retry counter for sanitizer (max 2)
     multi_attempt_mgr: Optional[object]        # MultiAttemptManager instance
     escalation_level: Optional[str]            # L0→L4 per current error_key
     _last_llm_source: Optional[str]            # "generator" or "debugger" — for routing
@@ -137,8 +135,8 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         total_iter=0,
         rollback_triggered=False,
         debugger_patch=None,
-        extraction_result=None,
-        pre_sc_result=None,
+        sanitize_result=None,
+        _sanitize_retry_count=0,
         multi_attempt_mgr=None,
         escalation_level=None,
         _last_llm_source=None,
@@ -149,14 +147,14 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
 
 
 # ──────────────────────────────────────────────────────────────
-# 2. Ten Nodes
+# 2. Nine Nodes
 # ──────────────────────────────────────────────────────────────
 class COMBANodes:
     """
-    Encapsulates the 10 pipeline nodes (v3).
+    Encapsulates the 9 pipeline nodes (v3).
 
-    Nodes: converter, generator, extraction_guard, pre_sc_check,
-           syntax_check, ted_syntax, debugger, patcher, tb_sim, ted_tb.
+    Nodes: converter, generator, sanitizer,
+           syntax_check, ted_syntax, debugger, tb_sim, ted_tb.
 
     Args:
         llm: A LangChain-compatible chat model (or StubLLM for testing).
@@ -164,8 +162,6 @@ class COMBANodes:
 
     def __init__(self, llm):
         self._llm = llm
-        self._extraction_guard = ExtractionGuard()
-        self._pre_sc_validator = PreSCValidator()
 
     # ──────────────────────────────────────────────────────────
     # Node 1: Converter — NL → XML
@@ -212,7 +208,7 @@ class COMBANodes:
     # ──────────────────────────────────────────────────────────
     def node_generator(self, state: COMBAState) -> dict:
         """Generate Verilog code from COMBA XML description.
-        Outputs raw LLM text → routed to extraction_guard."""
+        Outputs raw LLM text → routed to sanitizer."""
         print("\n" + "=" * 60)
         print("⚡ NODE: Generator (XML → raw LLM output)")
         print("=" * 60)
@@ -243,89 +239,57 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 2a: Extraction Guard — validate raw LLM output
+    # Node 2a: Sanitizer — extract code, auto-fix, collect warnings
     # ──────────────────────────────────────────────────────────
-    def node_extraction_guard(self, state: COMBAState) -> dict:
-        """Run ExtractionGuard on raw LLM output.
-        Validates and extracts clean Verilog from _raw_llm_output."""
+    def node_sanitizer(self, state: COMBAState) -> dict:
+        """Run VerilogSanitizer on raw LLM output.
+        Extracts code from noise, auto-fixes trivial issues, collects warnings.
+        NEVER blocks — code always reaches Verilator (except max-retry on empty)."""
         print("\n" + "=" * 60)
-        print("🛡️ NODE: Extraction Guard")
+        print("🧹 NODE: Sanitizer")
         print("=" * 60)
 
         raw = state.get("_raw_llm_output") or ""
         module_name = state.get("module_name")
+        retry_count = state.get("_sanitize_retry_count", 0)
 
-        result = self._extraction_guard.extract(raw, module_name)
+        result = verilog_sanitize(
+            raw_output=raw,
+            module_name=module_name,
+            max_retries=2,
+            current_retry=retry_count,
+        )
 
-        extraction_dict = {
-            "success": result.success,
+        sanitize_dict = {
             "code": result.code,
-            "failure_reason": result.failure_reason.value if result.failure_reason else None,
+            "needs_retry": result.needs_retry,
             "retry_prompt": result.retry_prompt,
             "warnings": result.warnings,
+            "auto_fixed": result.auto_fixed,
         }
 
         updates = {
-            "extraction_result": extraction_dict,
+            "sanitize_result": sanitize_dict,
         }
 
-        if result.success:
-            code = result.code
+        if result.needs_retry:
+            updates["_sanitize_retry_count"] = retry_count + 1
+            print(f"  🔄 Needs retry ({retry_count + 1}/2): {result.retry_prompt[:60]}...")
+        else:
+            code = result.code or ""
             # Ensure trailing newline
             if code and not code.endswith("\n"):
                 code += "\n"
             updates["gvd"] = code
+            updates["_sanitize_retry_count"] = 0  # reset for next round
             # Set sgvd on first generation (from generator)
             if state.get("_last_llm_source") == "generator":
                 updates["sgvd"] = code
-            print(f"  ✅ Extraction success: {len(code.splitlines())} lines")
-            if result.warnings:
-                for w in result.warnings:
-                    print(f"  ⚠️ Warning: {w}")
-        else:
-            print(f"  ❌ Extraction failed: {result.failure_reason}")
-            print(f"  📝 Retry prompt: {(result.retry_prompt or '')[:80]}...")
-
-        return updates
-
-    # ──────────────────────────────────────────────────────────
-    # Node 2b: Pre-SC Check — structural validation before Verilator
-    # ──────────────────────────────────────────────────────────
-    def node_pre_sc_check(self, state: COMBAState) -> dict:
-        """Run PreSCValidator before Verilator.
-        Catches obvious structural issues, optionally auto-fixes."""
-        print("\n" + "=" * 60)
-        print("🔬 NODE: Pre-SC Check")
-        print("=" * 60)
-
-        gvd = state["gvd"]
-        module_name = state.get("module_name")
-
-        result = self._pre_sc_validator.validate(gvd, module_name)
-
-        pre_sc_dict = {
-            "passed": result.passed,
-            "fatal_count": result.fatal_count,
-            "warning_count": result.warning_count,
-            "auto_fixed_code": result.auto_fixed_code,
-            "auto_fix_prompt": result.auto_fix_prompt,
-        }
-
-        updates = {
-            "pre_sc_result": pre_sc_dict,
-        }
-
-        if result.auto_fixed_code:
-            # Auto-fix applied — update GVD
-            updates["gvd"] = result.auto_fixed_code
-            print(f"  🔧 Auto-fixed {result.fatal_count} issue(s)")
-        elif result.passed:
-            print(f"  ✅ Pre-SC passed (warnings: {result.warning_count})")
-        else:
-            print(f"  ❌ Pre-SC failed: {result.fatal_count} fatal, {result.warning_count} warnings")
-            for issue in result.issues:
-                if issue.severity.value == "fatal":
-                    print(f"     FATAL: {issue.description}")
+            print(f"  ✅ Sanitized: {len(code.splitlines())} lines")
+            if result.auto_fixed:
+                print(f"  🔧 Auto-fixed applied")
+            for w in result.warnings:
+                print(f"  ⚠️ {w}")
 
         return updates
 
@@ -915,28 +879,20 @@ class COMBANodes:
 
 
 # ──────────────────────────────────────────────────────────────
-# 3. Eight Conditional Edges (Routing Functions)
+# 3. Seven Conditional Edges (Routing Functions)
 # ──────────────────────────────────────────────────────────────
 
-def route_after_extraction_guard(state: COMBAState) -> str:
-    """Route Ⓕ: After ExtractionGuard — success? → pre_sc, fail → re-query."""
-    result = state.get("extraction_result", {})
-    if result.get("success"):
-        return "node_pre_sc_check"
-    # Extraction failed — re-query the source (generator or debugger)
-    source = state.get("_last_llm_source", "generator")
-    if source == "debugger":
-        return "node_debugger"
-    return "node_generator"
-
-
-def route_after_pre_sc_check(state: COMBAState) -> str:
-    """Route Ⓖ: After PreSCCheck — passed/auto-fixed → SC, fail → re-query."""
-    result = state.get("pre_sc_result", {})
-    if result.get("passed") or result.get("auto_fixed_code"):
-        return "node_syntax_check"
-    # Pre-SC failed, not auto-fixable → re-query debugger
-    return "node_debugger"
+def route_after_sanitizer(state: COMBAState) -> str:
+    """Route Ⓕ: After Sanitizer — needs retry? → re-query LLM, else → SC."""
+    result = state.get("sanitize_result", {})
+    if result.get("needs_retry"):
+        # Re-query the source (generator or debugger)
+        source = state.get("_last_llm_source", "generator")
+        if source == "debugger":
+            return "node_debugger"
+        return "node_generator"
+    # Code always passes through to Verilator
+    return "node_syntax_check"
 
 
 def route_after_sc(state: COMBAState) -> str:
@@ -1029,20 +985,20 @@ def build_comba_graph(llm):
     """
     Build the full COMBA verification pipeline v3 as a LangGraph.
 
-    Graph topology:
-        START → converter → generator → extraction_guard → pre_sc_check
-               ┌───────────────────────────────────────────────────────┐
-               ↓                                                      │
-        syntax_check ──(pass)──→ tb_sim                               │
-               │                   │                                  │
-               ↓ (fail)            ↓ (fail)                           │
-        ted_syntax            ted_tb                                  │
-               │                   │                                  │
-               ↓                   ↓                                  │
-        debugger → extraction_guard → pre_sc_check → syntax_check ────┘
-                                        │
-                                        ↓ (max_iter)
-                                       END
+    Graph topology (9 pipeline nodes, 7 conditional edges):
+        START → converter → generator → sanitizer
+               ┌────────────────────────────────────────────┐
+               ↓                                            │
+        syntax_check ──(pass)──→ tb_sim                     │
+               │                   │                        │
+               ↓ (fail)            ↓ (fail)                 │
+        ted_syntax            ted_tb                        │
+               │                   │                        │
+               ↓                   ↓                        │
+        debugger → sanitizer → syntax_check ────────────────┘
+                       │
+                       ↓ (needs_retry, max 2)
+                   re-query LLM
 
     Args:
         llm: LangChain-compatible chat model.
@@ -1054,11 +1010,10 @@ def build_comba_graph(llm):
 
     builder = StateGraph(COMBAState)
 
-    # ── Add all 10 pipeline nodes ──
+    # ── Add all 9 pipeline nodes ──
     builder.add_node("node_converter", nodes.node_converter)
     builder.add_node("node_generator", nodes.node_generator)
-    builder.add_node("node_extraction_guard", nodes.node_extraction_guard)
-    builder.add_node("node_pre_sc_check", nodes.node_pre_sc_check)
+    builder.add_node("node_sanitizer", nodes.node_sanitizer)
     builder.add_node("node_syntax_check", nodes.node_syntax_check)
     builder.add_node("node_ted_syntax", nodes.node_ted_syntax)
     builder.add_node("node_debugger", nodes.node_debugger)
@@ -1074,8 +1029,8 @@ def build_comba_graph(llm):
     # ── Linear edges ──
     builder.add_edge(START, "node_converter")
     builder.add_edge("node_converter", "node_generator")
-    builder.add_edge("node_generator", "node_extraction_guard")  # v3: → guard first
-    builder.add_edge("node_debugger", "node_extraction_guard")   # v3: debugger → guard (was debugger → patcher)
+    builder.add_edge("node_generator", "node_sanitizer")
+    builder.add_edge("node_debugger", "node_sanitizer")
 
     # Terminal → END
     builder.add_edge("end_pass", END)
@@ -1083,25 +1038,15 @@ def build_comba_graph(llm):
     builder.add_edge("end_fail_ts", END)
     builder.add_edge("end_max_iter", END)
 
-    # ── Conditional edges (8 routing decisions) ──
+    # ── Conditional edges (7 routing decisions) ──
 
-    # v3 NEW: After extraction guard → pre_sc or re-query
+    # After sanitizer → SC (normal) or re-query LLM (hard failure, max 2)
     builder.add_conditional_edges(
-        "node_extraction_guard",
-        route_after_extraction_guard,
-        {
-            "node_pre_sc_check": "node_pre_sc_check",
-            "node_generator": "node_generator",
-            "node_debugger": "node_debugger",
-        },
-    )
-
-    # v3 NEW: After pre-SC check → syntax_check or re-query
-    builder.add_conditional_edges(
-        "node_pre_sc_check",
-        route_after_pre_sc_check,
+        "node_sanitizer",
+        route_after_sanitizer,
         {
             "node_syntax_check": "node_syntax_check",
+            "node_generator": "node_generator",
             "node_debugger": "node_debugger",
         },
     )

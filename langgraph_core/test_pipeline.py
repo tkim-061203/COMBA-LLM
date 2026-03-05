@@ -2,9 +2,8 @@
 E2E Tests for COMBA-PROMPT LangGraph Pipeline v3.
 
 Tests the full pipeline with StubLLM and mocked Verilator subprocess calls.
-All 8 routing decisions, ExtractionGuard, PreSCCheck, MultiAttemptManager,
-Rollback Manager, EDTM, and Iteration Control are verified without
-external dependencies.
+7 routing decisions, VerilogSanitizer, MultiAttemptManager, Rollback Manager,
+EDTM, and Iteration Control are verified without external dependencies.
 
 Usage:
     python -m pytest test_pipeline.py -v
@@ -27,8 +26,7 @@ from comba_pipeline import (
     route_after_ts,
     route_after_ted_syntax,
     route_after_ted_tb,
-    route_after_extraction_guard,
-    route_after_pre_sc_check,
+    route_after_sanitizer,
 )
 from stub_llm import (
     create_stub_llm,
@@ -90,41 +88,33 @@ TB_FAIL_RESULT = make_verilator_result(
 # ──────────────────────────────────────────────────────────────
 
 class TestRoutingFunctions:
-    """Test the 8 conditional routing functions in isolation."""
+    """Test the 7 conditional routing functions in isolation."""
 
-    # ── ExtractionGuard routing (v3 NEW) ──
-    def test_route_after_extraction_guard_success(self):
+    # ── Sanitizer routing (v3) ──
+    def test_route_after_sanitizer_no_retry(self):
+        """Sanitizer succeeded → go to SC."""
         state = make_initial_state()
-        state["extraction_result"] = {"success": True, "code": "module test..."}
-        assert route_after_extraction_guard(state) == "node_pre_sc_check"
+        state["sanitize_result"] = {"needs_retry": False, "code": "module test..."}
+        assert route_after_sanitizer(state) == "node_syntax_check"
 
-    def test_route_after_extraction_guard_fail_from_generator(self):
+    def test_route_after_sanitizer_retry_from_generator(self):
+        """Sanitizer needs retry, source was generator → back to generator."""
         state = make_initial_state()
-        state["extraction_result"] = {"success": False}
+        state["sanitize_result"] = {"needs_retry": True}
         state["_last_llm_source"] = "generator"
-        assert route_after_extraction_guard(state) == "node_generator"
+        assert route_after_sanitizer(state) == "node_generator"
 
-    def test_route_after_extraction_guard_fail_from_debugger(self):
+    def test_route_after_sanitizer_retry_from_debugger(self):
+        """Sanitizer needs retry, source was debugger → back to debugger."""
         state = make_initial_state()
-        state["extraction_result"] = {"success": False}
+        state["sanitize_result"] = {"needs_retry": True}
         state["_last_llm_source"] = "debugger"
-        assert route_after_extraction_guard(state) == "node_debugger"
+        assert route_after_sanitizer(state) == "node_debugger"
 
-    # ── PreSCCheck routing (v3 NEW) ──
-    def test_route_after_pre_sc_check_passed(self):
+    def test_route_after_sanitizer_default_no_result(self):
+        """No sanitize_result → default to SC (no retry)."""
         state = make_initial_state()
-        state["pre_sc_result"] = {"passed": True, "auto_fixed_code": None}
-        assert route_after_pre_sc_check(state) == "node_syntax_check"
-
-    def test_route_after_pre_sc_check_auto_fixed(self):
-        state = make_initial_state()
-        state["pre_sc_result"] = {"passed": False, "auto_fixed_code": "module ..."}
-        assert route_after_pre_sc_check(state) == "node_syntax_check"
-
-    def test_route_after_pre_sc_check_failed(self):
-        state = make_initial_state()
-        state["pre_sc_result"] = {"passed": False, "auto_fixed_code": None}
-        assert route_after_pre_sc_check(state) == "node_debugger"
+        assert route_after_sanitizer(state) == "node_syntax_check"
 
     # ── SC routing (unchanged) ──
     def test_route_after_sc_has_errors(self):
@@ -202,10 +192,10 @@ class TestNodes:
         state = make_initial_state()
         state["xml_description"] = GOOD_XML
         result = nodes.node_converter(state)
-        assert result == {}  # no changes
+        assert result == {}
 
     def test_node_generator_outputs_raw(self):
-        """v3: Generator outputs _raw_llm_output instead of gvd directly."""
+        """v3: Generator outputs _raw_llm_output, not gvd directly."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
@@ -217,53 +207,76 @@ class TestNodes:
         assert result["multi_attempt_mgr"] is not None
         assert "gvd" not in result  # v3: no direct gvd assignment
 
-    def test_node_extraction_guard_success(self):
-        """ExtractionGuard succeeds with valid Verilog."""
+    def test_node_sanitizer_extracts_clean_code(self):
+        """Sanitizer succeeds with valid Verilog."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
         state["_raw_llm_output"] = GOOD_VERILOG
         state["module_name"] = "adder_8bit"
         state["_last_llm_source"] = "generator"
-        result = nodes.node_extraction_guard(state)
-        assert result["extraction_result"]["success"] is True
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is False
         assert "gvd" in result
         assert "module adder_8bit" in result["gvd"]
-        assert result.get("sgvd") is not None  # set sgvd for generator
+        assert result.get("sgvd") is not None  # set on generator source
 
-    def test_node_extraction_guard_failure(self):
-        """ExtractionGuard fails with non-Verilog text."""
+    def test_node_sanitizer_extracts_from_markdown(self):
+        """Sanitizer extracts code from ```verilog``` fences."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
-        state["_raw_llm_output"] = "I cannot generate this code."
         state["module_name"] = "adder_8bit"
         state["_last_llm_source"] = "generator"
-        result = nodes.node_extraction_guard(state)
-        assert result["extraction_result"]["success"] is False
-        assert result["extraction_result"]["retry_prompt"] is not None
-        assert "gvd" not in result  # gvd not updated on failure
+        state["_raw_llm_output"] = (
+            "Here is the code:\n\n"
+            "```verilog\n"
+            + GOOD_VERILOG +
+            "\n```\n\n"
+            "This implements an 8-bit adder."
+        )
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is False
+        assert "module adder_8bit" in result["gvd"]
 
-    def test_node_pre_sc_check_passes_clean_code(self):
-        """PreSCCheck passes for clean Verilog."""
+    def test_node_sanitizer_rejects_empty_retries(self):
+        """Sanitizer requests retry for empty output (up to max 2)."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
-        state["gvd"] = GOOD_VERILOG
-        state["module_name"] = "adder_8bit"
-        result = nodes.node_pre_sc_check(state)
-        assert result["pre_sc_result"]["passed"] is True
-
-    def test_node_pre_sc_check_detects_issues(self):
-        """PreSCCheck detects structural issues."""
-        llm = create_stub_llm()
-        nodes = COMBANodes(llm)
-        state = make_initial_state()
-        # Code missing endmodule — should be caught
-        state["gvd"] = "module test(input a, output b);\n  assign b = a;\n"
         state["module_name"] = "test"
-        result = nodes.node_pre_sc_check(state)
-        assert result["pre_sc_result"]["fatal_count"] > 0
+        state["_last_llm_source"] = "generator"
+        state["_raw_llm_output"] = ""
+        state["_sanitize_retry_count"] = 0
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is True
+        assert result["_sanitize_retry_count"] == 1
+
+    def test_node_sanitizer_passes_after_max_retry(self):
+        """Sanitizer passes through after max retries, even on empty."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["module_name"] = "test"
+        state["_last_llm_source"] = "generator"
+        state["_raw_llm_output"] = ""
+        state["_sanitize_retry_count"] = 2  # at max
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is False
+        # Code is set (even if empty) — it still passes to Verilator
+        assert "gvd" in result
+
+    def test_node_sanitizer_auto_fixes_missing_endmodule(self):
+        """Sanitizer auto-appends endmodule for truncated output."""
+        llm = create_stub_llm()
+        nodes = COMBANodes(llm)
+        state = make_initial_state()
+        state["module_name"] = "test"
+        state["_last_llm_source"] = "debugger"
+        state["_raw_llm_output"] = "module test(input a, output b);\n    assign b = a;\n"
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is False
+        assert "endmodule" in result["gvd"]
 
     def test_node_syntax_check_clean(self):
         llm = create_stub_llm()
@@ -304,7 +317,6 @@ class TestNodes:
             "%Error: adder_8bit.v:9: Another error\n"
             "%Error: Exiting due to 2 error(s)\n"
         )
-
         result = nodes.node_ted_syntax(state)
         assert result["sc_exception"] is not None
         assert "result" in result["sc_exception"]
@@ -394,15 +406,13 @@ class TestE2EGraph:
             if "--lint-only" in cmd_str:
                 return next(sc_iter, CLEAN_SC_RESULT)
             elif "make" in cmd_str.lower() or cmd_str.endswith((".exe", "Vadder_8bit")):
-                # TB make or binary execution
                 return next(tb_iter, TB_PASS_RESULT)
             elif "verilator" in cmd_str.lower():
-                # TB verilate step
                 return next(tb_iter, make_verilator_result(0))
             return make_verilator_result(0)
 
         with patch("comba_pipeline.subprocess.run", side_effect=mock_subprocess_run):
-            with patch("comba_pipeline.shutil.copy2"):  # skip file copy
+            with patch("comba_pipeline.shutil.copy2"):
                 result = graph.invoke(state, {"recursion_limit": 150})
 
         return result
@@ -424,7 +434,7 @@ class TestE2EGraph:
         assert result["ts_trial"] == 1
 
     def test_sc_fix_then_pass(self):
-        """SC fails → TED → Debugger → ExtractionGuard → PreSC → SC passes → TB passes."""
+        """SC fails → TED → Debugger → Sanitizer → SC passes → TB passes."""
         llm = create_buggy_stub_llm()
         result = self._run_graph(
             llm,
@@ -433,18 +443,17 @@ class TestE2EGraph:
                 CLEAN_SC_RESULT,    # second SC after fix: passes
             ],
             tb_results=[
-                make_verilator_result(0),  # verilate
-                make_verilator_result(0),  # make
-                TB_PASS_RESULT,            # run
+                make_verilator_result(0),
+                make_verilator_result(0),
+                TB_PASS_RESULT,
             ],
         )
         assert result["final_status"] == "pass"
-        assert result["sc_trial"] == 2  # went through SC twice
+        assert result["sc_trial"] == 2
 
     def test_sc_iteration_limit(self):
         """SC always fails → hits MAX_SC_TRIALS → fail_sc."""
         llm = create_always_buggy_stub_llm()
-        # Provide enough SC errors to hit the limit
         sc_results = [SC_ERROR_RESULT] * (MAX_SC_TRIALS + 5)
         result = self._run_graph(llm, sc_results=sc_results)
         assert result["final_status"] == "fail_sc"
@@ -456,13 +465,11 @@ class TestE2EGraph:
         graph = build_comba_graph(llm)
         graph_obj = graph.get_graph()
 
-        # LangGraph returns nodes as dict or iterable — handle both
         if hasattr(graph_obj, 'nodes'):
             nodes_data = graph_obj.nodes
             if isinstance(nodes_data, dict):
                 node_ids = list(nodes_data.keys())
             else:
-                # Try as iterable of objects with .id
                 try:
                     node_ids = [n.id for n in nodes_data]
                 except AttributeError:
@@ -474,8 +481,7 @@ class TestE2EGraph:
         expected_nodes = [
             "node_converter",
             "node_generator",
-            "node_extraction_guard",   # v3 NEW
-            "node_pre_sc_check",       # v3 NEW
+            "node_sanitizer",          # v3: merged node
             "node_syntax_check",
             "node_ted_syntax",
             "node_debugger",
@@ -489,8 +495,10 @@ class TestE2EGraph:
         for expected in expected_nodes:
             assert expected in node_ids, f"Missing node: {expected}"
 
-        # node_patcher should NOT be in the graph (removed in v3)
-        assert "node_patcher" not in node_ids, "node_patcher should not be in v3 graph"
+        # Old nodes should NOT be present
+        assert "node_extraction_guard" not in node_ids
+        assert "node_pre_sc_check" not in node_ids
+        assert "node_patcher" not in node_ids
 
 
 # ──────────────────────────────────────────────────────────────
@@ -514,7 +522,6 @@ class TestEDTM:
             result = nodes.node_ted_syntax(state)
             edtm = result["edtm"]
 
-        # The signature should have been seen 5 times
         assert any(v == 5 for v in edtm.values())
 
     def test_edtm_warning_after_threshold(self):
@@ -531,7 +538,6 @@ class TestEDTM:
             result = nodes.node_ted_syntax(state)
             edtm = result["edtm"]
 
-        # After exceeding threshold, EDP should contain warning
         assert "EDTM WARNING" in result["edp"]
 
 
@@ -554,8 +560,8 @@ class TestState:
         assert state["final_status"] is None
         assert state["debugger_patch"] is None
         # v3 new fields
-        assert state["extraction_result"] is None
-        assert state["pre_sc_result"] is None
+        assert state["sanitize_result"] is None
+        assert state["_sanitize_retry_count"] == 0
         assert state["multi_attempt_mgr"] is None
         assert state["escalation_level"] is None
         assert state["_last_llm_source"] is None
@@ -568,40 +574,43 @@ class TestState:
 
 
 # ──────────────────────────────────────────────────────────────
-# Test 6: ExtractionGuard integration
+# Test 6: Sanitizer integration
 # ──────────────────────────────────────────────────────────────
 
-class TestExtractionGuard:
-    """Test ExtractionGuard node behavior."""
+class TestSanitizer:
+    """Test VerilogSanitizer node behavior."""
 
-    def test_guard_extracts_from_markdown_fence(self):
-        """Guard extracts code from ```verilog ... ``` fences."""
+    def test_sanitizer_warns_on_name_mismatch(self):
+        """Name mismatch produces warning but still passes (never blocks)."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
-        state["module_name"] = "adder_8bit"
-        state["_last_llm_source"] = "generator"
+        state["module_name"] = "correct_name"
+        state["_last_llm_source"] = "debugger"
         state["_raw_llm_output"] = (
-            "Here is the Verilog code:\n\n"
-            "```verilog\n"
-            + GOOD_VERILOG +
-            "\n```\n\n"
-            "This implements an 8-bit adder."
+            "module wrong_name(input a, output b);\n"
+            "    assign b = a;\n"
+            "endmodule\n"
         )
-        result = nodes.node_extraction_guard(state)
-        assert result["extraction_result"]["success"] is True
-        assert "module adder_8bit" in result["gvd"]
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is False
+        assert "gvd" in result  # code still passes through
+        # Should have a warning about name mismatch
+        warnings = result["sanitize_result"]["warnings"]
+        assert any("doesn't match" in w for w in warnings)
 
-    def test_guard_rejects_empty_output(self):
-        """Guard rejects empty LLM output."""
+    def test_sanitizer_no_module_keyword_retry(self):
+        """No module keyword triggers retry (not pass-through on first try)."""
         llm = create_stub_llm()
         nodes = COMBANodes(llm)
         state = make_initial_state()
         state["module_name"] = "test"
         state["_last_llm_source"] = "generator"
-        state["_raw_llm_output"] = ""
-        result = nodes.node_extraction_guard(state)
-        assert result["extraction_result"]["success"] is False
+        state["_raw_llm_output"] = "I cannot generate Verilog code for this."
+        state["_sanitize_retry_count"] = 0
+        result = nodes.node_sanitizer(state)
+        assert result["sanitize_result"]["needs_retry"] is True
+        assert "gvd" not in result  # not set on retry
 
 
 if __name__ == "__main__":
