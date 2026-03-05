@@ -2,24 +2,40 @@ from multiprocessing import Pool
 from dotenv import load_dotenv
 load_dotenv()
 
-import argparse, os, shutil, typing, glob, sys
+import argparse, os, shutil, typing, glob, sys, json
 import datetime
-from scripts.langchain_groq_util import generate as llmGenerate
-from scripts.utils import md_code_extract, generateWorkFolderArgument, generateMEICWorkFolderArgument
-from scripts.constants import Commands, ModuleNamePrefix, Template
-# from scripts.rag import ragCreate
-from scripts.codeAgent import LLMCodeAgent
-from scripts.MEICCodeAgent import MEICLLMCodeAgent
 
-from tqdm import tqdm
+# Legacy imports (only needed for old commands, not langgraph)
+try:
+    from scripts.langchain_groq_util import generate as llmGenerate
+    from scripts.utils import md_code_extract, generateWorkFolderArgument, generateMEICWorkFolderArgument
+    from scripts.constants import Commands, ModuleNamePrefix, Template
+    from scripts.codeAgent import LLMCodeAgent
+    from scripts.MEICCodeAgent import MEICLLMCodeAgent
+    from langchain_core.rate_limiters import InMemoryRateLimiter
+    rate_limiter = InMemoryRateLimiter(
+        requests_per_second=1.6,
+        check_every_n_seconds=0.1,
+        max_bucket_size=10000,
+    )
+    LEGACY_AVAILABLE = True
+except ImportError:
+    LEGACY_AVAILABLE = False
+    # Minimal stubs so argparse doesn't fail
+    class _Commands:
+        CREATEMODULE = type('', (), {'value': 'createmodule'})()
+        RUNWORK = type('', (), {'value': 'runwork'})()
+        RUNGENERIC = type('', (), {'value': 'rungeneric'})()
+        MAKEWORK = type('', (), {'value': 'makework'})()
+        GENERATE = type('', (), {'value': 'generate'})()
+        RAG = type('', (), {'value': 'rag'})()
+    Commands = _Commands()
 
-from langchain_core.rate_limiters import InMemoryRateLimiter
-
-rate_limiter = InMemoryRateLimiter(
-    requests_per_second=1.6,  # <-- Can only make a request once every 10 seconds!!
-    check_every_n_seconds=0.1,  # Wake up every 100 ms to check whether allowed to make a request,
-    max_bucket_size=10000,  # Controls the maximum burst size.
-)
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable=None, **kwargs):
+        return iterable
 
 srcDir = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, os.path.abspath(f"{srcDir}/scripts"))
