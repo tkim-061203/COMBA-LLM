@@ -884,7 +884,7 @@ class COMBANodes:
 
 def route_after_sanitizer(state: COMBAState) -> str:
     """Route Ⓕ: After Sanitizer — needs retry? → re-query LLM, else → SC."""
-    result = state.get("sanitize_result", {})
+    result = state.get("sanitize_result") or {}
     if result.get("needs_retry"):
         # Re-query the source (generator or debugger)
         source = state.get("_last_llm_source", "generator")
