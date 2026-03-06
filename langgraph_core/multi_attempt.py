@@ -46,8 +46,9 @@ class EscalationLevel(Enum):
 CATEGORY_HINTS = {
     # Arithmetic overflow
     "accu": "Check accumulator bit-width. Output should be wider than input to avoid overflow. Verify reset clears all bits.",
-    "adder_32bit": "Check carry chain propagation across all 32 bits. Verify intermediate carry signals.",
-    "adder_pipe_64bit": "Verify pipeline register stages. Each stage must latch partial sums. Check pipeline latency matches expected cycles.",
+    "adder_16bit": "Check the carry-out logic for each stage. The carry-out of the first 8-bit block MUST be the carry-in of the second. Ensure the final 16-bit output 'y' is concatenated correctly from all partial sums.",
+    "adder_32bit": "Use a Carry-Lookahead (CLA) or Ripple Carry approach. Ensure ALL output ports (S, C32) are driven using 'assign' or 'always' blocks. Do not leave the module body empty.",
+    "adder_pipe_64bit": "Check that ALL ports in the module(...) list are also declared as input/output/reg/wire inside the module. Maintain 4 distinct pipeline stages, each stage must latch its sum and the carry-out to the next stage.",
     "div_16bit": "Division requires iterative subtraction or shift-subtract. Check quotient and remainder bit-widths. Handle divide-by-zero.",
     "div_8bit": "Verify restoring/non-restoring division algorithm. Check that remainder is updated correctly each iteration.",
 
@@ -68,6 +69,8 @@ CATEGORY_HINTS = {
     "freq_div": "Check divisor value and toggle logic. Even division: toggle at count/2. Odd division: need duty cycle correction.",
     "synchronizer": "Multi-flop synchronizer: verify 2+ flip-flop stages. Check that output is delayed by correct cycles.",
     "right_shifter": "Verify shift amount and direction. Check arithmetic vs logical shift. Verify fill bit (0 or sign-extend).",
+    "alu": "For arithmetic shifts (SRA/SRAV), do not use concatenation with ternary operators if it causes syntax errors. Instead, use the signed shift operator '>>>' or explicit always blocks.",
+    "asyn_fifo": "Ensure 'ADDR_WIDTH' is defined as a parameter (e.g., $clog2(DEPTH)). Match port names 'wfull' and 'rempty' correctly in the logic (avoid 'full'/'empty' if not declared).",
 }
 
 
@@ -245,8 +248,23 @@ class MultiAttemptManager:
 
         elif level == EscalationLevel.L2_HINT:
             prev = self.history[error_key][-1]
-            hint = CATEGORY_HINTS.get(module_name, "")
-            return base + self._history_suffix(prev) + self._hint_suffix(hint)
+            mod_hint = CATEGORY_HINTS.get(module_name, "")
+            
+            # Extract error-specific hints from failure_content
+            err_hint = ""
+            error_str = f"{failure_content} {prev.error_detail}".lower()
+            hints_found = []
+            if "assertion" in error_str or "failed" in error_str:
+                hints_found.append("The simulation result does not match the expected value. Check your arithmetic logic.")
+            if "timeout" in error_str:
+                hints_found.append("Check for infinite loops in always blocks or incorrect clock/reset logic.")
+            
+            err_hint = " | ".join(hints_found)
+            combined_hint = mod_hint
+            if err_hint:
+                combined_hint = combined_hint + "\n" + err_hint if combined_hint else err_hint
+
+            return base + self._history_suffix(prev) + self._hint_suffix(combined_hint)
 
         elif level == EscalationLevel.L3_RETHINK:
             return self._rethink_prompt(module_name, gvd, "testbench",

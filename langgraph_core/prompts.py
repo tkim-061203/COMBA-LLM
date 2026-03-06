@@ -186,6 +186,9 @@ Based on the XML description, generate complete, synthesizable Verilog code.
 6. Respect `width_description` for signal widths (e.g., `[7:0]` → 8-bit).
 7. Respect `depth_description` for array dimensions.
 8. The code must be compilable by Verilator.
+9. CRITICAL: Every port listed in the module header `module name(port1, port2, ...);` MUST have a corresponding `input`, `output`, `wire`, or `reg` declaration inside the module body.
+10. DANGER: Do NOT leave the module body empty. Implement the full logic described.
+11. DANGER: Do NOT use sub-module instantiation. Implement ALL logic directly using `assign`, `always` blocks, and operators.
 
 ## Example 1: Combinational (adder_8bit)
 XML:
@@ -235,7 +238,7 @@ Your task is to identify and fix the TOPMOST error precisely.
 3. Common Verilator errors and fixes:
    - "Signal not found" → declare the signal as wire/reg
    - "Width mismatch" → adjust signal widths to match
-   - "UNDRIVEN" → ensure the signal is driven somewhere
+   - "UNDRIVEN" → Ensure the signal is driven by an `assign` statement or inside an `always` block. If a port is an output, it MUST be assigned a value.
    - "MULTIDRIVEN" → remove duplicate drivers
    - "Specified --top-module was not found" → check module name matches id
 4. Return a JSON object with EXACTLY two fields:
