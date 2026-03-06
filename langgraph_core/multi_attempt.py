@@ -187,8 +187,26 @@ class MultiAttemptManager:
 
         elif level == EscalationLevel.L2_HINT:
             prev = self.history[error_key][-1]
-            hint = CATEGORY_HINTS.get(module_name, "")
-            return base + self._history_suffix(prev) + self._hint_suffix(hint)
+            mod_hint = CATEGORY_HINTS.get(module_name, "")
+            
+            # Extract error-specific hints
+            err_hint = ""
+            error_str = f"{exception_title} {exception_content} {prev.error_detail}".lower()
+            hints_found = []
+            if "undriven" in error_str:
+                hints_found.append("You have an output port that is never assigned")
+            if "undefined" in error_str or "undeclared" in error_str:
+                hints_found.append("Check variable name spelling and case sensitivity")
+            if "bit-select" in error_str or "selwid" in error_str or "bit select" in error_str:
+                hints_found.append("Check output width declaration matches spec")
+            
+            err_hint = " | ".join(hints_found)
+            
+            combined_hint = mod_hint
+            if err_hint:
+                combined_hint = combined_hint + "\n" + err_hint if combined_hint else err_hint
+                
+            return base + self._history_suffix(prev) + self._hint_suffix(combined_hint)
 
         elif level == EscalationLevel.L3_RETHINK:
             return self._rethink_prompt(module_name, gvd, "syntax",
@@ -261,6 +279,17 @@ class MultiAttemptManager:
             f"  Content: {exc_content}",
             f"  Location: {log_content}",
         ])
+        
+        # Check for MODMISSING
+        chk_str = f"{exc_title} {exc_content}".upper()
+        if "MODMISSING" in chk_str:
+            import re
+            match = re.search(r"(?:module|Module)\s+'?([a-zA-Z0-9_]+)'?", exc_content)
+            sub_mod = match.group(1) if match else "UNKNOWN"
+            parts.extend([
+                "",
+                f"ERROR: You instantiated module '{sub_mod}' but it does not exist. This is a SINGLE-FILE design. Do NOT use module instantiation. Instead, implement ALL logic directly using assign, always blocks, and operators. Rewrite the entire module WITHOUT any sub-module instantiation."
+            ])
 
         if custom_vec:
             parts.extend(["", f"Context: {custom_vec}"])
