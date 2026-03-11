@@ -268,6 +268,7 @@ def run_pipeline_batch(
                     "sc_log": final.get("sc_log", ""),
                     "tb_log": final.get("tb_log", ""),
                     "error": final.get("error"),
+                    "edtm": final.get("edtm", {}),
                 }
 
                 status = result["final_status"]

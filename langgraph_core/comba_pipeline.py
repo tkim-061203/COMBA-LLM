@@ -727,12 +727,14 @@ class COMBANodes:
         """
         Topmost Exception Detection for Testbench.
         Parse tb_log → extract topmost failure → TDP.
+        Update EDTM tracker for TB failures.
         """
         print("\n" + "=" * 60)
         print("🔎 NODE: TED TB (Parse topmost TB failure)")
         print("=" * 60)
 
         tb_log = state["tb_log"] or ""
+        edtm = dict(state.get("edtm", {}))   # shallow copy
 
         # Extract topmost failure line
         topmost_failure = None
@@ -750,6 +752,12 @@ class COMBANodes:
         if not topmost_failure:
             # Fallback: use the tb_failure from state
             topmost_failure = state.get("tb_failure", "Unknown testbench failure")
+
+        # EDTM tracking for TB failures (prefixed with "TB:")
+        sig_tb = "TB:" + re.sub(r'\d+', 'N', topmost_failure).strip()
+        sig_tb = re.sub(r'\s+', ' ', sig_tb)
+        edtm[sig_tb] = edtm.get(sig_tb, 0) + 1
+        print(f"  📊 EDTM TB count for this sig: {edtm[sig_tb]}")
 
         tdp = f"Topmost testbench failure:\n{topmost_failure}"
 
@@ -771,6 +779,7 @@ class COMBANodes:
         return {
             "tdp": tdp,
             "phase": "ts",
+            "edtm": edtm,
         }
 
     # ──────────────────────────────────────────────────────────
