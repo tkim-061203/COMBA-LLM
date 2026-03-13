@@ -69,8 +69,9 @@ CATEGORY_HINTS = {
     "freq_div": "Check divisor value and toggle logic. Even division: toggle at count/2. Odd division: need duty cycle correction.",
     "synchronizer": "Multi-flop synchronizer: verify 2+ flip-flop stages. Check that output is delayed by correct cycles.",
     "right_shifter": "Verify shift amount and direction. Check arithmetic vs logical shift. Verify fill bit (0 or sign-extend).",
-    "alu": "For arithmetic shifts (SRA/SRAV), do not use concatenation with ternary operators if it causes syntax errors. Instead, use the signed shift operator '>>>' or explicit always blocks.",
-    "asyn_fifo": "Ensure 'ADDR_WIDTH' is defined as a parameter (e.g., $clog2(DEPTH)). Match port names 'wfull' and 'rempty' correctly in the logic (avoid 'full'/'empty' if not declared).",
+    "alu": "ALU logic: Ensure all operations (ADD, SUB, AND, OR, XOR, SHIFT) are handled. For arithmetic shifts (SRA/SRAV), use signed shift operator '>>>' or explicit always blocks with signed casting. Check that output 'result' is assigned in all cases.",
+    "asyn_fifo": "Asynchronous FIFO: Ensure 'ADDR_WIDTH' and 'DEPTH' are correctly handled. Gray code conversion for pointers is critical. Use $clog2(DEPTH) for address width calculation. Match port names 'wfull' and 'rempty' exactly in assignments.",
+    "multi_pipe_4bit": "4-bit Pipelined Multiplier: Break down multiplication into 4 stages. Each stage must accumulate partial products. Ensure all pipeline registers are reset correctly.",
 }
 
 
@@ -298,15 +299,15 @@ class MultiAttemptManager:
             f"  Location: {log_content}",
         ])
         
-        # Check for MODMISSING
+        # Check for missing sub-module
         chk_str = f"{exc_title} {exc_content}".upper()
-        if "MODMISSING" in chk_str:
+        if "MODMISSING" in chk_str or "CANNOT FIND FILE CONTAINING MODULE" in chk_str:
             import re
-            match = re.search(r"(?:module|Module)\s+'?([a-zA-Z0-9_]+)'?", exc_content)
+            match = re.search(r"(?:module|Module)[^a-zA-Z0-9_]+([a-zA-Z0-9_]+)", exc_content)
             sub_mod = match.group(1) if match else "UNKNOWN"
             parts.extend([
                 "",
-                f"ERROR: You instantiated module '{sub_mod}' but it does not exist. This is a SINGLE-FILE design. Do NOT use module instantiation. Instead, implement ALL logic directly using assign, always blocks, and operators. Rewrite the entire module WITHOUT any sub-module instantiation."
+                f"ERROR: You instantiated sub-module '{sub_mod}' but its definition is missing. Because this is a single-file design, you MUST provide the complete Verilog implementation for '{sub_mod}' (and any other missing sub-modules) in the same file. Append the missing module definition(s) at the end."
             ])
 
         if custom_vec:
@@ -355,10 +356,11 @@ class MultiAttemptManager:
     def _history_suffix(self, prev: AttemptRecord) -> str:
         return (
             "\n\n--- IMPORTANT ---\n"
-            f"A previous attempt to fix this ALSO FAILED with:\n"
+            f"A previous attempt to fix this ALSO FAILED with the same error:\n"
             f"  {prev.error_detail}\n"
-            "Your previous fix did not resolve the issue. "
-            "Please try a DIFFERENT approach this time.\n"
+            f"Your previous code snapshot was:\n{prev.code_snapshot[:500]}...\n"
+            "Your previous fix failed to resolve this specific error. "
+            "Please analyze why the previous change was insufficient and try a NEW approach.\n"
         )
 
     def _hint_suffix(self, hint: str) -> str:

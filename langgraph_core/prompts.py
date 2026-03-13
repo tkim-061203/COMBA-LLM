@@ -188,7 +188,7 @@ Based on the XML description, generate complete, synthesizable Verilog code.
 8. The code must be compilable by Verilator.
 9. CRITICAL: Every port listed in the module header `module name(port1, port2, ...);` MUST have a corresponding `input`, `output`, `wire`, or `reg` declaration inside the module body.
 10. DANGER: Do NOT leave the module body empty. Implement the full logic described.
-11. DANGER: Do NOT use sub-module instantiation. Implement ALL logic directly using `assign`, `always` blocks, and operators.
+11. If you instantiate any sub-modules, you MUST provide their complete definitions in the same file.
 
 ## Example 1: Combinational (adder_8bit)
 XML:
@@ -238,13 +238,14 @@ Your task is to identify and fix the TOPMOST error precisely.
 3. Common Verilator errors and fixes:
    - "Signal not found" → declare the signal as wire/reg
    - "Width mismatch" → adjust signal widths to match
-   - "UNDRIVEN" → Ensure the signal is driven by an `assign` statement or inside an `always` block. If a port is an output, it MUST be assigned a value.
-   - "MULTIDRIVEN" → remove duplicate drivers
-   - "Specified --top-module was not found" → check module name matches id
-4. Return a JSON object with EXACTLY two fields:
+   - "UNDRIVEN" → Ensure the signal is driven by an `assign` statement or inside an `always` block. If a port is an output, it MUST be assigned a value. Check for port declaration vs assignment mismatches.
+   - "MULTIDRIVEN" → remove duplicate drivers. Ensure a signal is only driven in one `always` block or one `assign` statement.
+   - "Specified --top-module was not found" → check module name matches id.
+4. If the error is "%Error-UNDRIVEN", you MUST prioritize finding the output port that is missing an assignment and add it.
+5. Return a JSON object with EXACTLY two fields:
    {{"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}}
-5. The buggy_code MUST be an EXACT substring of the current code.
-6. Return ONLY the JSON object, no explanation, no markdown fences.
+6. The buggy_code MUST be an EXACT substring of the current code.
+7. Return ONLY the JSON object, no explanation, no markdown fences.
 """
 
 EDP_USER_PROMPT = """\
