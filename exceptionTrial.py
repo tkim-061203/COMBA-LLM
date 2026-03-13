@@ -141,8 +141,11 @@ def run_analysis(description_type: str, modules_glob: str):
                 tb_failure_counts[key] = 0
             tb_failure_counts.loc[module_name, key] = all_tb_failures.count(failure)
 
+        passed_samples = [x for x in sample_list if x.get("final_status") == "pass"]
+        best_sample = passed_samples[0] if passed_samples else sample_list[0]
+
         module_summary[module_name] = {
-            "final_status": sample_list[0].get("final_status", "unknown"),
+            "final_status": best_sample.get("final_status", "unknown"),
             "sc_exception_types": list(set(all_sc_exceptions)),
             "sc_exception_total": len(all_sc_exceptions),
             "tb_failure_total": len(all_tb_failures),

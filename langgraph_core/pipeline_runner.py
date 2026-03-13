@@ -311,7 +311,12 @@ def run_pipeline_batch(
     print(f"{'═' * 60}")
     pass_count = 0
     for name, data in all_results.items():
-        r = data["samples"] if isinstance(data["samples"], dict) else data["samples"][0]
+        if isinstance(data["samples"], list):
+            passed_samples = [x for x in data["samples"] if x.get("final_status") == "pass"]
+            r = passed_samples[0] if passed_samples else data["samples"][0]
+        else:
+            r = data["samples"]
+            
         status = r.get("final_status", "?")
         if status == "pass":
             pass_count += 1
@@ -373,7 +378,8 @@ def _export_markdown_summary(
         s = data.get("samples")
         # Normalise: single-sample run stores a dict, multi stores a list
         if isinstance(s, list):
-            r = s[0]  # use first sample for table
+            passed_samples = [x for x in s if x.get("final_status") == "pass"]
+            r = passed_samples[0] if passed_samples else s[0]
         else:
             r = s or {}
 
