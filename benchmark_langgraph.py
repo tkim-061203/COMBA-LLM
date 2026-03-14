@@ -97,7 +97,7 @@ def load_designs(modules_dir: str = None, filter_names: list[str] | None = None)
 
         # Load description (XML preferred)
         desc = ""
-        for fn in ["description.xml", "description.txt", "prompt.txt"]:
+        for fn in ["design_description.xml", "description.xml", "design_description.txt", "description.txt", "prompt.txt"]:
             fp = os.path.join(d, fn)
             if os.path.exists(fp):
                 desc = open(fp).read(); break
