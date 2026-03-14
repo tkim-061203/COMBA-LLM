@@ -189,6 +189,7 @@ Based on the XML description, generate complete, synthesizable Verilog code.
 9. CRITICAL: Every port listed in the module header `module name(port1, port2, ...);` MUST have a corresponding `input`, `output`, `wire`, or `reg` declaration inside the module body.
 10. DANGER: Do NOT leave the module body empty. Implement the full logic described.
 11. If you instantiate any sub-modules, you MUST provide their complete definitions in the same file.
+12. CRITICAL: Do NOT instantiate any undefined custom sub-modules (like `adder_4bit`, `full_adder`, etc) unless you provide their source code. Your goal is a self-contained module. If a submodule is not provided, implement the logic directly using behavioral RTL.
 
 ## Example 1: Combinational (adder_8bit)
 XML:
@@ -242,7 +243,8 @@ Your task is to identify and fix the TOPMOST error precisely.
    - "MULTIDRIVEN" → remove duplicate drivers. Ensure a signal is only driven in one `always` block or one `assign` statement.
    - "Specified --top-module was not found" → check module name matches id.
 4. If the error is "%Error-UNDRIVEN", you MUST prioritize finding the output port that is missing an assignment and add it.
-5. Return a JSON object with EXACTLY two fields:
+5. CRITICAL: The module MUST be completely self-contained. Do NOT instantiate external custom submodules that are not defined in the code. If an error says "Cannot find file containing module: 'X'", you MUST replace the instantiation of 'X' with inline behavioral RTL logic.
+6. Return a JSON object with EXACTLY two fields:
    {{"buggy_code": "<the exact buggy line(s) from the code>", "correct_code": "<the corrected line(s)>"}}
 6. The buggy_code MUST be an EXACT substring of the current code.
 7. Return ONLY the JSON object, no explanation, no markdown fences.
@@ -339,8 +341,9 @@ Your task is to fix the code so that it compiles and simulates correctly.
 1. Fix ONLY the specific error described. Do not rewrite the entire module.
 2. Preserve the module name, port names, and overall architecture.
 3. The fixed code must be compilable by Verilator.
-4. Return ONLY the complete fixed Verilog code, no explanation.
-5. Ensure the file ends with a newline character.
+4. CRITICAL: The module MUST be self-contained. Do NOT instantiate external submodules. If an error says "Cannot find file containing module: 'X'", replace the usage of 'X' with behavioral RTL logic.
+5. Return ONLY the complete fixed Verilog code, no explanation.
+6. Ensure the file ends with a newline character.
 
 ## Error Phase
 - If phase is "sc" (syntax check): the error comes from Verilator --lint-only.
