@@ -11,3 +11,4 @@ reports/log/log.txt
 autom4te.cache
 .build*
 logs/*
+.ipynb_checkpoints
