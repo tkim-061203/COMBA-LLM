@@ -1,0 +1,24 @@
+{
+  "module_name": "adder_16bit",
+  "description_type": "txt",
+  "samples": {
+    "module_name": "adder_16bit",
+    "description_type": "txt",
+    "final_status": "fail_ts",
+    "sc_trial": 8,
+    "ts_trial": 5,
+    "total_iter": 13,
+    "gvd": "module adder_8bit(\n    input [7:0] a, b,\n    input cin,\n    output [7:0] sum,\n    output cout\n);\n\n    wire c1, c2, c3, c4, c5, c6, c7, c8;\n\n    // Instantiate 1-bit full adders\n    assign {c1, sum[0]} = a[0] + b[0] + cin;\n    assign {c2, sum[1]} = a[1] + b[1] + c1;\n    assign {c3, sum[2]} = a[2] + b[2] + c2;\n    assign {c4, sum[3]} = a[3] + b[3] + c3;\n    assign {c5, sum[4]} = a[4] + b[4] + c4;\n    assign {c6, sum[5]} = a[5] + b[5] + c5;\n    assign {c7, sum[6]} = a[6] + b[6] + c6;\n    assign {cout, sum[7]} = a[7] + b[7] + c7;\n\nendmodule\n",
+    "xml_description": "<module id=\"adder_16bit\">\n    <description>Implement a 16-bit full adder in combinational logic.</description>\n    <ports>\n        <input id=\"a\" width_description=\"[15:0]\">16-bit input operand A.</input>\n        <input id=\"b\" width_description=\"[15:0]\">16-bit input operand B.</input>\n        <input id=\"cin\">Carry-in input.</input>\n        <output id=\"sum\" width_description=\"[15:0]\">16-bit sum output.</output>\n        <output id=\"cout\">Carry-out output.</output>\n    </ports>\n    <implementation>Implement a 16-bit full adder using 8-bit adders. Use a single assign statement to perform the addition.</implementation>\n</module>",
+    "sc_log": "%Warning-UNUSED: adder_16bit.v:8:38: Signal is not driven, nor used: 'c8'\n                                   : ... In instance adder_8bit\n    8 |     wire c1, c2, c3, c4, c5, c6, c7, c8;\n      |                                      ^~\n                 ... Use \"/* verilator lint_off UNUSED */\" and lint_on around source to disable this message.\n",
+    "tb_log": "[VERILATE]\n%Error: Specified --top-module 'adder_16bit' was not found in design.\n%Error: Exiting due to 1 error(s)\n\n[VERILATE FAILED]",
+    "error": null,
+    "edtm": {
+      "TB:Make failed during TB binary build": 1,
+      "%Error: adder_16bit.v:N:5: Cannot find file containing module: 'adder_8bit'": 1,
+      "%Error: adder_16bit.v:N:5: Cannot find file containing module: 'full_adder'": 1,
+      "TB:Verilator compilation failed during TB build": 4,
+      "%Error: adder_16bit.v:N:1: Cannot find file containing module: 'adder_8bit'": 1
+    }
+  }
+}

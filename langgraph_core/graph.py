@@ -20,6 +20,7 @@ import re, os, copy, logging, subprocess, tempfile
 from typing import TypedDict, Any
 
 from langgraph.graph import StateGraph, END
+from prompts import build_generation_prompt, build_edp_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +247,6 @@ def _make_nodes(llm):
                 "phase": "generation" if ok else "xml_retry"}
 
     def node_generator(state: COMBAState) -> dict:
-        from prompt_generator import build_generation_prompt
         raw = llm.generate(build_generation_prompt(state["xml_description"]), model="base")
         code = _extract_verilog(raw)
         return {"gvd": code, "module_name": _mod_name(code), "sgvd_versions": [],
@@ -300,7 +300,6 @@ def _make_nodes(llm):
         gvd = state["gvd"]
         if phase == "debug_sc":
             edp = state["current_edp"]
-            from prompt_edp import build_edp_prompt
             msgs = build_edp_prompt(
                 module_name=state.get("module_name", "design"), gvd=gvd,
                 exceptionType=edp.get("exceptionType", ""),

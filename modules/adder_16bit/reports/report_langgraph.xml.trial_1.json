@@ -1,0 +1,24 @@
+{
+  "module_name": "adder_16bit",
+  "description_type": "xml",
+  "samples": {
+    "module_name": "adder_16bit",
+    "description_type": "xml",
+    "final_status": "fail_sc",
+    "sc_trial": 10,
+    "ts_trial": 0,
+    "total_iter": 10,
+    "gvd": "module adder_16bit\n  (\n   input [15:0] A,\n   input [15:0] B,\n   input Cin,\n   output [15:0] S,\n   output Cout\n   );\n   wire [16:0] c;\n\n   adder_8 adder1 (\n      .A(A[7:0]),\n      .B(B[7:0]),\n      .Cin(Cin),\n      .S(S[7:0]),\n      .Cout(c[8])\n   );\n\n   adder_8 adder2 (\n      .A(A[15:8]),\n      .B(B[15:8]),\n      .Cin(c[8]),\n      .S(S[15:8]),\n      .Cout(c[16])\n   );\n\n   assign Cout = c[16];\nendmodule\n",
+    "xml_description": "<module id=\"adder_16bit\">\n    <description>Implement a module of a 16-bit full adder in combinational logic.</description>\n    <ports>\n        <input id=\"a\" width_description=\"[15:0]\">16-bit input operand A.</input>\n        <input id=\"b\" width_description=\"[15:0]\">16-bit input operand B.</input>\n        <input id=\"Cin\">Carry-in input. The module name \"Cin\" is case-sensitive.</input>\n        <output id=\"y\" width_description=\"[15:0]\">16-bit output representing the sum of A and B.</output>\n        <output id=\"Co\">Carry-out output. The module name \"Co\" is case-sensitive.</output>\n    </ports>\n    <implementation>In the adder_16bit module, you need to design a small bit-width adder(8-bit adder), which will be instantiated multiple times. The 8-bit adder module utilizes a series of bit-level adders (full adders) to perform the addition operation.</implementation>\n</module>",
+    "sc_log": "%Error: adder_16bit.v:11:4: Cannot find file containing module: 'adder_8'\n   11 |    adder_8 adder1 (\n      |    ^~~~~~~\n%Error: adder_16bit.v:11:4: This may be because there's no search path specified with -I<dir>.\n   11 |    adder_8 adder1 (\n      |    ^~~~~~~\n        ... Looked in:\n             adder_8\n             adder_8.v\n             adder_8.sv\n             obj_dir/adder_8\n             obj_dir/adder_8.v\n             obj_dir/adder_8.sv\n%Error: adder_16bit.v:19:4: Cannot find file containing module: 'adder_8'\n   19 |    adder_8 adder2 (\n      |    ^~~~~~~\n%Error: Exiting due to 3 error(s)\n",
+    "tb_log": null,
+    "error": null,
+    "edtm": {
+      "%Error: adder_16bit.v:N:5: Cannot find file containing module: 'adder_8bit'": 1,
+      "%Error: adder_16bit.v:N:3: Cannot find file containing module: 'CLA_8'": 1,
+      "%Error: adder_16bit.v:N:3: Cannot find file containing module: 'adder_8'": 2,
+      "%Error: adder_16bit.v:N:4: Cannot find file containing module: 'adder_8'": 4,
+      "%Error: adder_16bit.v:N:25: Can't find definition of 'Cout' in dotted variable: 'adder2.Cout'": 2
+    }
+  }
+}

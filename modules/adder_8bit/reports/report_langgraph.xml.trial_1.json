@@ -1,0 +1,22 @@
+{
+  "module_name": "adder_8bit",
+  "description_type": "xml",
+  "samples": {
+    "module_name": "adder_8bit",
+    "description_type": "xml",
+    "final_status": "fail_sc",
+    "sc_trial": 10,
+    "ts_trial": 0,
+    "total_iter": 10,
+    "gvd": "module adder_8bit(\n    input [7:0] a,\n    input [7:0] b,\n    input cin,\n    output [7:0] sum,\n    output cout\n    );\n\n    wire c;\n    \n    adder_4bit cla_lower (\n        .a(a[3:0]),\n        .b(b[3:0]),\n        .cin(cin),\n        .sum(sum[3:0]),\n        .cout(c)\n    );\n    \n    adder_4bit cla_upper (\n        .a(a[7:4]),\n        .b(b[7:4]),\n        .cin(c),\n        .sum(sum[7:4]),\n        .cout(cout)\n    );\n    \nendmodule\n",
+    "xml_description": "<module id=\"adder_8bit\">\n    <description>Implement a module of an 8-bit adder with multiple bit-level adders in combinational logic.</description>\n    <ports>\n        <input id=\"a\" width_description=\"[7:0]\">8-bit input operand A.</input>\n        <input id=\"b\" width_description=\"[7:0]\">8-bit input operand B.</input>\n        <input id=\"cin\">Carry-in input.</input>\n        <output id=\"sum\" width_description=\"[7:0]\">8-bit output representing the sum of A and B.</output>\n        <output id=\"cout\">Carry-out output.</output>\n    </ports>\n    <implementation>The module utilizes a series of bit-level adders (full adders) to perform the addition operation.</implementation>\n</module>",
+    "sc_log": "%Error: adder_8bit.v:11:5: Cannot find file containing module: 'adder_4bit'\n   11 |     adder_4bit cla_lower (\n      |     ^~~~~~~~~~\n%Error: adder_8bit.v:11:5: This may be because there's no search path specified with -I<dir>.\n   11 |     adder_4bit cla_lower (\n      |     ^~~~~~~~~~\n        ... Looked in:\n             adder_4bit\n             adder_4bit.v\n             adder_4bit.sv\n             obj_dir/adder_4bit\n             obj_dir/adder_4bit.v\n             obj_dir/adder_4bit.sv\n%Error: adder_8bit.v:19:5: Cannot find file containing module: 'adder_4bit'\n   19 |     adder_4bit cla_upper (\n      |     ^~~~~~~~~~\n%Error: Exiting due to 3 error(s)\n",
+    "tb_log": null,
+    "error": null,
+    "edtm": {
+      "%Error: adder_8bit.v:N:5: Cannot find file containing module: 'full_adder'": 5,
+      "%Error: adder_8bit.v:N:5: Cannot find file containing module: 'adder_4'": 3,
+      "%Error: adder_8bit.v:N:5: Cannot find file containing module: 'adder_4bit'": 2
+    }
+  }
+}
