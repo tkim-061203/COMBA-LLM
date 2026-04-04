@@ -1,0 +1,25 @@
+{
+  "module_name": "adder_16bit",
+  "description_type": "txt",
+  "samples": {
+    "module_name": "adder_16bit",
+    "description_type": "txt",
+    "final_status": "fail_sc",
+    "sc_trial": 10,
+    "ts_trial": 3,
+    "total_iter": 13,
+    "gvd": "module adder_16bit(\n    input [15:0] a,\n    input [15:0] b,\n    input Cin,\n    output [15:0] y,\n    output Co\n);\nwire [7:0] sum_a;\nwire [7:0] sum_b;\nwire carry_out_a;\nwire carry_out_b;\nwire carry_in_b;\n\n// Instantiate two 8-bit adder modules\nadder_8bit adder_a(\n    .a(a[7:0]),\n    .b(b[7:0]),\n    .Cin(Cin),\n    .y(sum_a),\n    .Co(carry_out_a)\n);\n\nadder_8bit adder_b(\n    .a(a[15:8]),\n    .b(b[15:8]),\n    .Cin(carry_out_a),\n    .y(sum_b),\n    .Co(carry_out_b)\n);\n\nassign carry_in_b = carry_out_b;\nassign y = {sum_b, sum_a};\nassign Co = carry_in_b;\n\nendmodule\n",
+    "xml_description": "<module id=\"adder_16bit\">\n    <description>Implement a 16-bit full adder in combinational logic.</description>\n    <ports>\n        <input id=\"a\" width_description=\"[15:0]\">16-bit input operand A.</input>\n        <input id=\"b\" width_description=\"[15:0]\">16-bit input operand B.</input>\n        <input id=\"cin\">Carry-in input.</input>\n        <output id=\"sum\" width_description=\"[15:0]\">16-bit sum output.</output>\n        <output id=\"cout\">Carry-out output.</output>\n    </ports>\n    <implementation>Implement a 16-bit full adder using 8-bit adders. Use the 8-bit adder to perform addition on the lower and upper 8 bits of the inputs separately.</implementation>\n</module>",
+    "sc_log": "%Error: adder_16bit.v:15:1: Cannot find file containing module: 'adder_8bit'\n   15 | adder_8bit adder_a(\n      | ^~~~~~~~~~\n%Error: adder_16bit.v:15:1: This may be because there's no search path specified with -I<dir>.\n   15 | adder_8bit adder_a(\n      | ^~~~~~~~~~\n        ... Looked in:\n             adder_8bit\n             adder_8bit.v\n             adder_8bit.sv\n             obj_dir/adder_8bit\n             obj_dir/adder_8bit.v\n             obj_dir/adder_8bit.sv\n%Error: adder_16bit.v:23:1: Cannot find file containing module: 'adder_8bit'\n   23 | adder_8bit adder_b(\n      | ^~~~~~~~~~\n%Error: Exiting due to 3 error(s)\n",
+    "tb_log": "[VERILATE]\n%Error: Specified --top-module 'adder_16bit' was not found in design.\n%Error: Exiting due to 1 error(s)\n\n[VERILATE FAILED]",
+    "error": null,
+    "edtm": {
+      "TB:Make failed during TB binary build": 2,
+      "%Error-UNDRIVEN: adder_16bit.v:N:12: Signal is not driven: 'cout'": 1,
+      "%Error: adder_16bit.v:N:1: Cannot find file containing module: 'adder_8bit'": 4,
+      "TB:Verilator compilation failed during TB build": 1,
+      "%Error: adder_16bit.v:N:12: Duplicate declaration of signal: 'sum'": 1,
+      "%Error: adder_16bit.v:N:5: Cannot find file containing module: 'adder_8bit'": 1
+    }
+  }
+}

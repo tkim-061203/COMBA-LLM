@@ -15,13 +15,13 @@
 set -euo pipefail
 
 # ── Config ──
-BASE_MODEL="${BASE_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct}"
-MERGED_MODEL="${MERGED_MODEL:-/home/nntkim/llama_factory_run/qwen_debugger_merged_v3_model}"
+GENARATED_MODEL="${GENARATED_MODEL:-/home/nntkim/Downloads/model}"
+MERGED_MODEL="${MERGED_MODEL:-/home/nntkim/Downloads/model_debugger}"
 PORT_GEN=8000
 PORT_DBG=8001
 MAX_MODEL_LEN=16384
 GPU_MEM=0.92
-CACHE_DIR="../hf_model_cache"
+CACHE_DIR="../../hf_model_cache"
 DTYPE="bfloat16"
 LOG_DIR="./logs"
 
@@ -29,7 +29,7 @@ LOG_DIR="./logs"
 ACTION="start"
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --base-model)    BASE_MODEL="$2"; shift 2 ;;
+        --base-model)    GENARATED_MODEL="$2"; shift 2 ;;
         --merged-model)  MERGED_MODEL="$2"; shift 2 ;;
         --stop)          ACTION="stop"; shift ;;
         --status)        ACTION="status"; shift ;;
@@ -101,7 +101,7 @@ start_dual() {
     fi
 
     echo "📋 Configuration:"
-    echo "   GPU 0: $BASE_MODEL"
+    echo "   GPU 0: $GENARATED_MODEL"
     echo "   GPU 1: $MERGED_MODEL"
     echo ""
 
@@ -110,8 +110,9 @@ start_dual() {
     # ── GPU 0: Base Qwen ──
     echo "🔵 Starting Generator on GPU 0 (:$PORT_GEN)..."
     CUDA_VISIBLE_DEVICES=0 nohup python -m vllm.entrypoints.openai.api_server \
-        --model $BASE_MODEL \
-        --served-model-name qwen-base \
+        --model $GENARATED_MODEL \
+        --download-dir $CACHE_DIR \
+        --served-model-name genarater \
         --dtype $DTYPE \
         --max-model-len $MAX_MODEL_LEN \
         --gpu-memory-utilization $GPU_MEM \
@@ -152,7 +153,7 @@ start_dual() {
 
     echo ""
     echo "✅ Both servers running!"
-    echo "   Generator: http://localhost:$PORT_GEN/v1  model=\"qwen-base\""
+    echo "   Generator: http://localhost:$PORT_GEN/v1  model=\"genarater\""
     echo "   Debugger:  http://localhost:$PORT_DBG/v1  model=\"debugger\""
     echo ""
     nvidia-smi --query-gpu=index,memory.used,memory.free --format=csv,noheader 2>/dev/null || true

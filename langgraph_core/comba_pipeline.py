@@ -1,14 +1,22 @@
 """
-COMBA-PROMPT Full Verification Pipeline — LangGraph Implementation.
+COMBA-PROMPT Full Verification Pipeline v3 — LangGraph Implementation.
 
-Track 1: 7 nodes, 5 conditional edges, Rollback Manager, EDTM, Iteration Control.
+9 nodes, 7 conditional edges, Rollback Manager, EDTM, Iteration Control.
+VerilogSanitizer + MultiAttemptManager inserted between LLM calls and Verilator.
 
 Flow:
-  NL → [Converter] → XML → [Generator] → Verilog (GVD)
+  NL → [Converter] → XML → [Generator] → [Sanitizer]
     → [SC] → pass? → [TB] → pass? → END ✅
               ↓ fail          ↓ fail
-         [TED_SC]→[Correcter]→[SC]  (loop)
-                          [TED_TB]→[Correcter]→[SC]  (loop)
+         [TED_SC]→[Debugger]→[Sanitizer]→[SC]  (loop)
+                          [TED_TB]→[Debugger]→[Sanitizer]→[SC]  (loop)
+
+v3 Changes:
+  - VerilogSanitizer: extracts code from LLM noise, auto-fixes trivial issues,
+    collects structural warnings. NEVER blocks — code always reaches Verilator.
+  - MultiAttemptManager: escalating correction prompts (L0→L4)
+  - Debugger: delegates prompt building to MultiAttemptManager
+  - 1 new conditional edge for sanitizer routing
 
 Usage:
   # With real LLM
@@ -29,7 +37,14 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
-from prompts import converterPromptTemplate, generatorPromptTemplate, correcterPromptTemplate
+from prompts import (
+    converterPromptTemplate,
+    generatorPromptTemplate,
+    edpPromptTemplate,
+    tdpPromptTemplate,
+)
+from verilog_sanitizer import sanitize as verilog_sanitize
+from multi_attempt import MultiAttemptManager
 
 # ──────────────────────────────────────────────────────────────
 # Configuration Constants
@@ -45,7 +60,7 @@ VERILATOR_WERROR = ["UNDRIVEN", "MULTIDRIVEN"]
 
 
 # ──────────────────────────────────────────────────────────────
-# 1. COMBAState — TypedDict with ~20 fields
+# 1. COMBAState — TypedDict
 # ──────────────────────────────────────────────────────────────
 class COMBAState(TypedDict):
     # ── Input/Output ──
@@ -56,6 +71,7 @@ class COMBAState(TypedDict):
     # ── Generated Verilog ──
     gvd: Optional[str]                         # Generated Verilog Description (current)
     sgvd: Optional[str]                        # Saved GVD (rollback snapshot)
+    _raw_llm_output: Optional[str]             # Raw LLM output before extraction
 
     # ── Syntax Check (SC) ──
     sc_log: Optional[str]                      # SC raw log output
@@ -79,6 +95,16 @@ class COMBAState(TypedDict):
     total_iter: int                            # Total iteration counter
     rollback_triggered: bool                   # Rollback triggered this iteration?
 
+    # ── Debugger Output ──
+    debugger_patch: Optional[dict]             # JSON {buggy_code, correct_code} from Debugger
+
+    # ── v3: Sanitizer / MultiAttempt ──
+    sanitize_result: Optional[dict]            # VerilogSanitizer output {code, warnings, needs_retry, ...}
+    _sanitize_retry_count: int                 # Retry counter for sanitizer (max 2)
+    multi_attempt_mgr: Optional[object]        # MultiAttemptManager instance
+    escalation_level: Optional[str]            # L0→L4 per current error_key
+    _last_llm_source: Optional[str]            # "generator" or "debugger" — for routing
+
     # ── Result ──
     final_status: Optional[str]                # "pass", "fail_sc", "fail_ts", "max_iter"
     error: Optional[str]                       # Runtime error message
@@ -93,6 +119,7 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         module_name=module_name or None,
         gvd=None,
         sgvd=None,
+        _raw_llm_output=None,
         sc_log=None,
         sc_exception=None,
         sc_exception_count=0,
@@ -107,6 +134,12 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
         ts_trial=0,
         total_iter=0,
         rollback_triggered=False,
+        debugger_patch=None,
+        sanitize_result=None,
+        _sanitize_retry_count=0,
+        multi_attempt_mgr=None,
+        escalation_level=None,
+        _last_llm_source=None,
         final_status=None,
         error=None,
         work_dir=None,
@@ -114,11 +147,14 @@ def make_initial_state(nl_input: str = "", module_name: str = "") -> COMBAState:
 
 
 # ──────────────────────────────────────────────────────────────
-# 2. Seven Nodes
+# 2. Nine Nodes
 # ──────────────────────────────────────────────────────────────
 class COMBANodes:
     """
-    Encapsulates the 7 pipeline nodes.
+    Encapsulates the 9 pipeline nodes (v3).
+
+    Nodes: converter, generator, sanitizer,
+           syntax_check, ted_syntax, debugger, tb_sim, ted_tb.
 
     Args:
         llm: A LangChain-compatible chat model (or StubLLM for testing).
@@ -168,12 +204,13 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 2: Generator — XML → Verilog
+    # Node 2: Generator — XML → raw LLM output
     # ──────────────────────────────────────────────────────────
     def node_generator(self, state: COMBAState) -> dict:
-        """Generate Verilog code from COMBA XML description."""
+        """Generate Verilog code from COMBA XML description.
+        Outputs raw LLM text → routed to sanitizer."""
         print("\n" + "=" * 60)
-        print("⚡ NODE: Generator (XML → Verilog)")
+        print("⚡ NODE: Generator (XML → raw LLM output)")
         print("=" * 60)
 
         xml_desc = state["xml_description"]
@@ -182,25 +219,79 @@ class COMBANodes:
             "conversation": [],
         })
         response = self._llm.invoke(result)
-        content = response.content.strip()
+        raw_output = response.content.strip()
 
-        # Extract Verilog code — try JSON first, fallback to markdown/raw
-        code = self._extract_verilog(content)
+        print(f"  ✅ LLM returned {len(raw_output.splitlines())} lines")
 
-        # Ensure trailing newline (Verilator EOFNEWLINE)
-        if code and not code.endswith("\n"):
-            code += "\n"
-
-        print(f"  ✅ Generated {len(code.splitlines())} lines of Verilog")
+        # Initialize MultiAttemptManager on first entry
+        mgr = state.get("multi_attempt_mgr")
+        if mgr is None:
+            mgr = MultiAttemptManager()
 
         return {
-            "gvd": code,
-            "sgvd": code,          # initial snapshot for rollback
+            "_raw_llm_output": raw_output,
+            "_last_llm_source": "generator",
             "phase": "sc",
             "sc_trial": 0,
             "ts_trial": 0,
             "total_iter": 0,
+            "multi_attempt_mgr": mgr,
         }
+
+    # ──────────────────────────────────────────────────────────
+    # Node 2a: Sanitizer — extract code, auto-fix, collect warnings
+    # ──────────────────────────────────────────────────────────
+    def node_sanitizer(self, state: COMBAState) -> dict:
+        """Run VerilogSanitizer on raw LLM output.
+        Extracts code from noise, auto-fixes trivial issues, collects warnings.
+        NEVER blocks — code always reaches Verilator (except max-retry on empty)."""
+        print("\n" + "=" * 60)
+        print("🧹 NODE: Sanitizer")
+        print("=" * 60)
+
+        raw = state.get("_raw_llm_output") or ""
+        module_name = state.get("module_name")
+        retry_count = state.get("_sanitize_retry_count", 0)
+
+        result = verilog_sanitize(
+            raw_output=raw,
+            module_name=module_name,
+            max_retries=2,
+            current_retry=retry_count,
+        )
+
+        sanitize_dict = {
+            "code": result.code,
+            "needs_retry": result.needs_retry,
+            "retry_prompt": result.retry_prompt,
+            "warnings": result.warnings,
+            "auto_fixed": result.auto_fixed,
+        }
+
+        updates = {
+            "sanitize_result": sanitize_dict,
+        }
+
+        if result.needs_retry:
+            updates["_sanitize_retry_count"] = retry_count + 1
+            print(f"  🔄 Needs retry ({retry_count + 1}/2): {result.retry_prompt[:60]}...")
+        else:
+            code = result.code or ""
+            # Ensure trailing newline
+            if code and not code.endswith("\n"):
+                code += "\n"
+            updates["gvd"] = code
+            updates["_sanitize_retry_count"] = 0  # reset for next round
+            # Set sgvd on first generation (from generator)
+            if state.get("_last_llm_source") == "generator":
+                updates["sgvd"] = code
+            print(f"  ✅ Sanitized: {len(code.splitlines())} lines")
+            if result.auto_fixed:
+                print(f"  🔧 Auto-fixed applied")
+            for w in result.warnings:
+                print(f"  ⚠️ {w}")
+
+        return updates
 
     # ──────────────────────────────────────────────────────────
     # Node 3: Syntax Check — Verilator --lint-only
@@ -333,55 +424,171 @@ class COMBANodes:
         }
 
     # ──────────────────────────────────────────────────────────
-    # Node 5: Correcter — Fix code using EDP or TDP
+    # Node 5a: Debugger — LLM #2 → raw output → extraction_guard
     # ──────────────────────────────────────────────────────────
-    def node_correcter(self, state: COMBAState) -> dict:
+    def node_debugger(self, state: COMBAState) -> dict:
         """
-        Correcter node with Rollback Manager.
-        Takes EDP (SC phase) or TDP (TS phase) + current GVD → fix.
-        If resulting code is worse (more exceptions), rollback.
+        Debugger node (v3).
+        Delegates prompt building to MultiAttemptManager.
+        Outputs raw LLM text → routed to extraction_guard.
         """
         print("\n" + "=" * 60)
-        print(f"🔧 NODE: Correcter (phase={state['phase']})")
+        print(f"🐛 NODE: Debugger (phase={state['phase']})")
         print("=" * 60)
 
         phase = state["phase"]
         current_gvd = state["gvd"]
         error_desc = state["edp"] if phase == "sc" else state["tdp"]
+        module_name = state.get("module_name", "unknown")
 
         if not error_desc:
-            print("  ⚠️ No error description available, skipping correction")
+            print("  ⚠️ No error description available, skipping")
             return {}
+
+        # ── Get or create MultiAttemptManager ──
+        mgr = state.get("multi_attempt_mgr")
+        if mgr is None:
+            mgr = MultiAttemptManager()
+
+        # ── Build error_key for escalation tracking ──
+        error_key = re.sub(r':\d+:', ':N:', error_desc.split('\n')[0])
+        error_key = re.sub(r'\s+', ' ', error_key).strip()[:100]
+
+        # ── Get escalation level ──
+        esc_level = mgr.get_escalation_level(error_key)
+        print(f"  📊 Escalation: L{esc_level} for key: {error_key[:60]}")
+
+        # ── Build prompt via MultiAttemptManager ──
+        if phase == "sc":
+            prompt_text = mgr.build_sc_prompt(
+                error_key=error_key,
+                module_name=module_name,
+                gvd=current_gvd,
+                exception_type="syntax_error",
+                exception_title=state.get("sc_exception", error_desc)[:200],
+                exception_content=error_desc,
+                log_content=(state.get("sc_log") or "")[:2000],
+                task_description=state.get("nl_input", ""),
+            )
+        else:
+            traces = ""
+            if error_desc and "Debug traces:" in error_desc:
+                traces = error_desc.split("Debug traces:")[-1].strip()
+            prompt_text = mgr.build_ts_prompt(
+                error_key=error_key,
+                module_name=module_name,
+                gvd=current_gvd,
+                todo_num=0,
+                trace_content=traces or "(no traces available)",
+                failure_content=state.get("tb_failure", error_desc),
+                task_description=state.get("nl_input", ""),
+            )
+
+        # ── Call LLM ──
+        from langchain_core.messages import HumanMessage
+        messages = [HumanMessage(content=prompt_text)]
+
+        # Switch to LoRA if available
+        if hasattr(self._llm, 'switch_to_lora'):
+            self._llm.switch_to_lora()
+
+        response = self._llm.invoke(messages)
+
+        # Switch back to base
+        if hasattr(self._llm, 'switch_to_base'):
+            self._llm.switch_to_base()
+
+        raw_output = response.content.strip()
+
+        # Record attempt for escalation
+        mgr.record_attempt(
+            error_key=error_key,
+            phase="sc" if phase == "sc" else "ts",
+            error_detail=error_desc[:500],
+            code_snapshot=current_gvd[:1000] if current_gvd else "",
+        )
+
+        print(f"  ✅ Debugger LLM returned {len(raw_output.splitlines())} lines")
+
+        return {
+            "_raw_llm_output": raw_output,
+            "_last_llm_source": "debugger",
+            "multi_attempt_mgr": mgr,
+            "escalation_level": f"L{esc_level}",
+        }
+
+    # ──────────────────────────────────────────────────────────
+    # Node 5b: Patcher — Apply JSON patch to GVD
+    # ──────────────────────────────────────────────────────────
+    def node_patcher(self, state: COMBAState) -> dict:
+        """
+        Patch Applier (v2).
+        1. Save snapshot sgvd
+        2. Normalize whitespace before match
+        3. Validate: buggy_code exists in GVD?
+        4. If found → str.replace() → new GVD
+        5. If NOT found → fuzzy match or skip (keep GVD unchanged)
+        6. Compare error count: increase → rollback to sgvd
+        """
+        print("\n" + "=" * 60)
+        print("🩹 NODE: Patch Applier")
+        print("=" * 60)
+
+        patch = state.get("debugger_patch")
+        current_gvd = state["gvd"]
 
         # ── Rollback Manager: Save snapshot ──
         sgvd = current_gvd
         sc_prev_exception_count = state["sc_exception_count"]
 
-        # ── Call LLM to fix ──
-        result = correcterPromptTemplate.invoke({
-            "verilog_code": current_gvd,
-            "error_description": error_desc,
-            "phase": phase,
-        })
-        response = self._llm.invoke(result)
-        fixed_code = response.content.strip()
+        if not patch or not patch.get("buggy_code") or not patch.get("correct_code"):
+            print("  ⚠️ No valid patch, keeping current GVD")
+            return {
+                "sgvd": sgvd,
+                "sc_prev_exception_count": sc_prev_exception_count,
+                "rollback_triggered": True,
+            }
 
-        # Clean markdown fences
-        fixed_code = self._extract_verilog(fixed_code)
+        buggy_code = patch["buggy_code"]
+        correct_code = patch["correct_code"]
+
+        # Try exact match first
+        if buggy_code in current_gvd:
+            new_gvd = current_gvd.replace(buggy_code, correct_code, 1)
+            print(f"  ✅ Exact match found — patch applied")
+        else:
+            # Try normalized whitespace match
+            normalized_gvd = self._normalize_whitespace(current_gvd)
+            normalized_buggy = self._normalize_whitespace(buggy_code)
+
+            if normalized_buggy in normalized_gvd:
+                # Find the actual lines and replace
+                new_gvd = self._fuzzy_replace(current_gvd, buggy_code, correct_code)
+                if new_gvd != current_gvd:
+                    print(f"  ✅ Fuzzy match found — patch applied")
+                else:
+                    print(f"  ⚠️ Fuzzy match failed to apply, keeping current GVD")
+                    return {
+                        "sgvd": sgvd,
+                        "sc_prev_exception_count": sc_prev_exception_count,
+                        "rollback_triggered": True,
+                    }
+            else:
+                print(f"  ⚠️ buggy_code NOT FOUND in GVD — skipping patch")
+                return {
+                    "sgvd": sgvd,
+                    "sc_prev_exception_count": sc_prev_exception_count,
+                    "rollback_triggered": True,
+                }
 
         # Ensure trailing newline
-        if fixed_code and not fixed_code.endswith("\n"):
-            fixed_code += "\n"
+        if new_gvd and not new_gvd.endswith("\n"):
+            new_gvd += "\n"
 
-        # If the LLM returned empty or very short code, don't apply
-        if not fixed_code or len(fixed_code.strip()) < 20:
-            print("  ⚠️ Correcter returned invalid code, keeping previous version")
-            return {"rollback_triggered": True}
-
-        print(f"  ✅ Correcter produced {len(fixed_code.splitlines())} lines")
+        print(f"  📝 GVD updated: {len(new_gvd.splitlines())} lines")
 
         return {
-            "gvd": fixed_code,
+            "gvd": new_gvd,
             "sgvd": sgvd,
             "sc_prev_exception_count": sc_prev_exception_count,
             "rollback_triggered": False,
@@ -520,12 +727,14 @@ class COMBANodes:
         """
         Topmost Exception Detection for Testbench.
         Parse tb_log → extract topmost failure → TDP.
+        Update EDTM tracker for TB failures.
         """
         print("\n" + "=" * 60)
         print("🔎 NODE: TED TB (Parse topmost TB failure)")
         print("=" * 60)
 
         tb_log = state["tb_log"] or ""
+        edtm = dict(state.get("edtm", {}))   # shallow copy
 
         # Extract topmost failure line
         topmost_failure = None
@@ -543,6 +752,12 @@ class COMBANodes:
         if not topmost_failure:
             # Fallback: use the tb_failure from state
             topmost_failure = state.get("tb_failure", "Unknown testbench failure")
+
+        # EDTM tracking for TB failures (prefixed with "TB:")
+        sig_tb = "TB:" + re.sub(r'\d+', 'N', topmost_failure).strip()
+        sig_tb = re.sub(r'\s+', ' ', sig_tb)
+        edtm[sig_tb] = edtm.get(sig_tb, 0) + 1
+        print(f"  📊 EDTM TB count for this sig: {edtm[sig_tb]}")
 
         tdp = f"Topmost testbench failure:\n{topmost_failure}"
 
@@ -564,11 +779,88 @@ class COMBANodes:
         return {
             "tdp": tdp,
             "phase": "ts",
+            "edtm": edtm,
         }
 
     # ──────────────────────────────────────────────────────────
     # Utility: Extract Verilog from LLM response
     # ──────────────────────────────────────────────────────────
+    def _parse_debugger_json(self, content: str) -> Optional[dict]:
+        """Parse JSON patch {buggy_code, correct_code} from debugger output."""
+        # Try direct JSON parse
+        try:
+            data = json.loads(content)
+            if "buggy_code" in data and "correct_code" in data:
+                return {
+                    "buggy_code": data["buggy_code"],
+                    "correct_code": data["correct_code"],
+                }
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        # Try extracting JSON from markdown code block
+        json_match = re.search(
+            r'```(?:json)?\s*\n(.*?)\n```',
+            content, re.DOTALL
+        )
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                if "buggy_code" in data and "correct_code" in data:
+                    return {
+                        "buggy_code": data["buggy_code"],
+                        "correct_code": data["correct_code"],
+                    }
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        # Try extracting JSON object from mixed text
+        brace_match = re.search(r'\{[^{}]*"buggy_code"[^{}]*"correct_code"[^{}]*\}', content, re.DOTALL)
+        if not brace_match:
+            brace_match = re.search(r'\{[^{}]*"correct_code"[^{}]*"buggy_code"[^{}]*\}', content, re.DOTALL)
+        if brace_match:
+            try:
+                data = json.loads(brace_match.group(0))
+                if "buggy_code" in data and "correct_code" in data:
+                    return {
+                        "buggy_code": data["buggy_code"],
+                        "correct_code": data["correct_code"],
+                    }
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        return None
+
+    @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        """Collapse all whitespace to single spaces for fuzzy matching."""
+        return re.sub(r'\s+', ' ', text).strip()
+
+    @staticmethod
+    def _fuzzy_replace(source: str, buggy: str, correct: str) -> str:
+        """
+        Fuzzy replace: normalize both sides, find match, replace in original.
+        Falls back to line-by-line matching.
+        """
+        # Normalize the buggy code to compare
+        buggy_lines = [l.strip() for l in buggy.strip().splitlines()]
+        source_lines = source.splitlines()
+
+        # Find the starting line index
+        for i in range(len(source_lines) - len(buggy_lines) + 1):
+            match = True
+            for j, bl in enumerate(buggy_lines):
+                if source_lines[i + j].strip() != bl:
+                    match = False
+                    break
+            if match:
+                # Replace the matched lines
+                correct_lines = correct.strip().splitlines()
+                new_lines = source_lines[:i] + correct_lines + source_lines[i + len(buggy_lines):]
+                return "\n".join(new_lines) + "\n"
+
+        return source  # no match found
+
     def _extract_verilog(self, content: str) -> str:
         """Extract Verilog code from various LLM output formats."""
         # Try JSON format first
@@ -596,43 +888,74 @@ class COMBANodes:
 
 
 # ──────────────────────────────────────────────────────────────
-# 3. Five Conditional Edges (Routing Functions)
+# 3. Seven Conditional Edges (Routing Functions)
 # ──────────────────────────────────────────────────────────────
 
+def route_after_sanitizer(state: COMBAState) -> str:
+    """Route Ⓕ: After Sanitizer — needs retry? → re-query LLM, else → SC."""
+    result = state.get("sanitize_result") or {}
+    if result.get("needs_retry"):
+        # Re-query the source (generator or debugger)
+        source = state.get("_last_llm_source", "generator")
+        if source == "debugger":
+            return "node_debugger"
+        return "node_generator"
+    # Code always passes through to Verilator
+    return "node_syntax_check"
+
+
 def route_after_sc(state: COMBAState) -> str:
-    """After Syntax Check: has errors? → TED_SC, else → TB."""
+    """Route Ⓐ: After Syntax Check — has errors? → TED_SC, else → TB."""
     if state["sc_exception_count"] > 0:
         return "node_ted_syntax"
     return "node_tb_sim"
 
 
 def route_after_ts(state: COMBAState) -> str:
-    """After TB Sim: has failures? → TED_TB, else → END (pass!)."""
+    """Route Ⓑ: After TB Sim — has failures? → TED_TB, else → PASS."""
     if state.get("tb_failure"):
         return "node_ted_tb"
-    # All pass!
     return "end_pass"
 
 
 def route_after_ted_syntax(state: COMBAState) -> str:
-    """After TED Syntax: check SC trial limit → correcter or give up."""
+    """Route Ⓒ: After TED Syntax — no error → TB, limit/give-up → fail, else → debugger."""
+    # If TED couldn't parse any error, skip debugger → go directly to TB
+    if not state.get("sc_exception"):
+        return "node_tb_sim"
     if state["sc_trial"] >= MAX_SC_TRIALS:
         return "end_fail_sc"
-    return "node_correcter"
+    # Check MultiAttemptManager.should_give_up if available
+    mgr = state.get("multi_attempt_mgr")
+    if mgr is not None:
+        error_key = re.sub(r':\d+:', ':N:', (state.get("sc_exception") or ""))
+        error_key = re.sub(r'\s+', ' ', error_key).strip()[:100]
+        if mgr.should_give_up(error_key):
+            print(f"  ⛔ MultiAttempt: giving up on error_key: {error_key[:50]}")
+            return "end_fail_sc"
+    return "node_debugger"
 
 
 def route_after_ted_tb(state: COMBAState) -> str:
-    """After TED TB: check TS trial limit → correcter or give up."""
+    """Route Ⓓ: After TED TB — TS trial limit or give-up → fail, else → debugger."""
     if state["ts_trial"] >= MAX_TS_TRIALS:
         return "end_fail_ts"
-    return "node_correcter"
+    # Check MultiAttemptManager.should_give_up if available
+    mgr = state.get("multi_attempt_mgr")
+    if mgr is not None:
+        tb_failure = state.get("tb_failure", "")
+        error_key = re.sub(r'\s+', ' ', tb_failure).strip()[:100]
+        if mgr.should_give_up(error_key):
+            print(f"  ⛔ MultiAttempt: giving up on TB error: {error_key[:50]}")
+            return "end_fail_ts"
+    return "node_debugger"
 
 
-def route_after_correcter(state: COMBAState) -> str:
-    """After Correcter: check total iteration limit → SC or give up."""
+def route_after_patcher(state: COMBAState) -> str:
+    """Route Ⓔ: After Patcher — total iteration limit → extraction_guard or fail."""
     if state["total_iter"] >= MAX_TOTAL_ITER:
         return "end_max_iter"
-    return "node_syntax_check"
+    return "node_extraction_guard"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -669,22 +992,22 @@ def end_max_iter(state: COMBAState) -> dict:
 
 def build_comba_graph(llm):
     """
-    Build the full COMBA verification pipeline as a LangGraph.
+    Build the full COMBA verification pipeline v3 as a LangGraph.
 
-    Graph topology:
-        START → converter → generator → syntax_check
-               ┌──────────────────────────────────┐
-               ↓                                   │
-        syntax_check ──(pass)──→ tb_sim            │
-               │                   │               │
-               ↓ (fail)            ↓ (fail)        │
-        ted_syntax            ted_tb               │
-               │                   │               │
-               ↓                   ↓               │
-        correcter ─────────────────────────────────┘
-               │
-               ↓ (max_iter)
-              END
+    Graph topology (9 pipeline nodes, 7 conditional edges):
+        START → converter → generator → sanitizer
+               ┌────────────────────────────────────────────┐
+               ↓                                            │
+        syntax_check ──(pass)──→ tb_sim                     │
+               │                   │                        │
+               ↓ (fail)            ↓ (fail)                 │
+        ted_syntax            ted_tb                        │
+               │                   │                        │
+               ↓                   ↓                        │
+        debugger → sanitizer → syntax_check ────────────────┘
+                       │
+                       ↓ (needs_retry, max 2)
+                   re-query LLM
 
     Args:
         llm: LangChain-compatible chat model.
@@ -696,12 +1019,13 @@ def build_comba_graph(llm):
 
     builder = StateGraph(COMBAState)
 
-    # ── Add all nodes ──
+    # ── Add all 9 pipeline nodes ──
     builder.add_node("node_converter", nodes.node_converter)
     builder.add_node("node_generator", nodes.node_generator)
+    builder.add_node("node_sanitizer", nodes.node_sanitizer)
     builder.add_node("node_syntax_check", nodes.node_syntax_check)
     builder.add_node("node_ted_syntax", nodes.node_ted_syntax)
-    builder.add_node("node_correcter", nodes.node_correcter)
+    builder.add_node("node_debugger", nodes.node_debugger)
     builder.add_node("node_tb_sim", nodes.node_tb_sim)
     builder.add_node("node_ted_tb", nodes.node_ted_tb)
 
@@ -714,7 +1038,8 @@ def build_comba_graph(llm):
     # ── Linear edges ──
     builder.add_edge(START, "node_converter")
     builder.add_edge("node_converter", "node_generator")
-    builder.add_edge("node_generator", "node_syntax_check")
+    builder.add_edge("node_generator", "node_sanitizer")
+    builder.add_edge("node_debugger", "node_sanitizer")
 
     # Terminal → END
     builder.add_edge("end_pass", END)
@@ -722,7 +1047,19 @@ def build_comba_graph(llm):
     builder.add_edge("end_fail_ts", END)
     builder.add_edge("end_max_iter", END)
 
-    # ── Conditional edges (5 routing decisions) ──
+    # ── Conditional edges (7 routing decisions) ──
+
+    # After sanitizer → SC (normal) or re-query LLM (hard failure, max 2)
+    builder.add_conditional_edges(
+        "node_sanitizer",
+        route_after_sanitizer,
+        {
+            "node_syntax_check": "node_syntax_check",
+            "node_generator": "node_generator",
+            "node_debugger": "node_debugger",
+        },
+    )
+
     builder.add_conditional_edges(
         "node_syntax_check",
         route_after_sc,
@@ -738,19 +1075,13 @@ def build_comba_graph(llm):
     builder.add_conditional_edges(
         "node_ted_syntax",
         route_after_ted_syntax,
-        {"node_correcter": "node_correcter", "end_fail_sc": "end_fail_sc"},
+        {"node_tb_sim": "node_tb_sim", "node_debugger": "node_debugger", "end_fail_sc": "end_fail_sc"},
     )
 
     builder.add_conditional_edges(
         "node_ted_tb",
         route_after_ted_tb,
-        {"node_correcter": "node_correcter", "end_fail_ts": "end_fail_ts"},
-    )
-
-    builder.add_conditional_edges(
-        "node_correcter",
-        route_after_correcter,
-        {"node_syntax_check": "node_syntax_check", "end_max_iter": "end_max_iter"},
+        {"node_debugger": "node_debugger", "end_fail_ts": "end_fail_ts"},
     )
 
     return builder.compile()

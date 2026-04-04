@@ -4,7 +4,7 @@ StubLLM for testing COMBA pipeline without a real LLM.
 Provides hardcoded responses based on prompt content:
 - Converter prompt → known-good XML (adder_8bit)
 - Generator prompt → known-good Verilog (or intentionally buggy)
-- Correcter prompt → progressively fixed Verilog
+- Debugger prompt → JSON patch {buggy_code, correct_code}
 
 Usage:
     from stub_llm import create_stub_llm, create_buggy_stub_llm
@@ -13,6 +13,7 @@ Usage:
 """
 
 from typing import Any, List, Optional
+import json
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
@@ -89,6 +90,22 @@ module adder_8bit(
 endmodule
 """
 
+# Use json.dumps() to guarantee correct JSON escaping of newlines
+DEBUGGER_PATCH_FIXED = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "wire [8:0] result;\n    assign result = a + b + cin;"
+})
+
+DEBUGGER_PATCH_BUGGY = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "assign result = a + b + cin;"
+})
+
+DEBUGGER_PATCH_WORSE = json.dumps({
+    "buggy_code": "assign result = a + b + cin;",
+    "correct_code": "assign result = a + b + cin;\n    assign sum = unknown_signal;\n    assign cout = another_undeclared;"
+})
+
 
 # ──────────────────────────────────────────────────────────────
 # StubLLM Implementation
@@ -125,9 +142,11 @@ class StubLLM(BaseChatModel):
         ).lower()
 
         # Determine which response to return
-        # Order matters: check correcter first (most specific), then generator, then converter
-        if "debugger" in full_text or ("fix" in full_text and "error" in full_text):
-            response_key = "correcter"
+        # Order matters: check debugger/EDP/TDP first (most specific), then generator, then converter
+        if ("syntax debugging" in full_text or "functional debugging" in full_text
+                or "debugger" in full_text or ("fix" in full_text and "error" in full_text)
+                or "json patch" in full_text or "buggy_code" in full_text):
+            response_key = "debugger"
         elif "verilog code generator" in full_text or "generate complete" in full_text:
             response_key = "generator"
         elif "specification converter" in full_text or "convert the user" in full_text:
@@ -156,7 +175,7 @@ def create_stub_llm() -> StubLLM:
         responses={
             "converter": GOOD_XML,
             "generator": GOOD_VERILOG,
-            "correcter": GOOD_VERILOG,
+            "debugger": DEBUGGER_PATCH_FIXED,
             "default": GOOD_VERILOG,
         }
     )
@@ -177,7 +196,7 @@ def create_buggy_stub_llm() -> StubLLM:
         responses={
             "converter": GOOD_XML,
             "generator": BUGGY_VERILOG,
-            "correcter": FIXED_VERILOG,
+            "debugger": DEBUGGER_PATCH_FIXED,
             "default": GOOD_VERILOG,
         }
     )
@@ -189,7 +208,7 @@ def create_always_buggy_stub_llm() -> StubLLM:
         responses={
             "converter": GOOD_XML,
             "generator": BUGGY_VERILOG,
-            "correcter": BUGGY_VERILOG,     # never fixes it
+            "debugger": DEBUGGER_PATCH_BUGGY,     # patch that doesn't fix it
             "default": BUGGY_VERILOG,
         }
     )
@@ -201,7 +220,7 @@ def create_worse_stub_llm() -> StubLLM:
         responses={
             "converter": GOOD_XML,
             "generator": BUGGY_VERILOG,
-            "correcter": WORSE_VERILOG,      # "fix" introduces more errors
+            "debugger": DEBUGGER_PATCH_WORSE,      # "fix" introduces more errors
             "default": BUGGY_VERILOG,
         }
     )

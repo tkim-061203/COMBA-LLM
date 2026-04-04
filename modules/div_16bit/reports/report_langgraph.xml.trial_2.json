@@ -1,0 +1,20 @@
+{
+  "module_name": "div_16bit",
+  "description_type": "xml",
+  "samples": {
+    "module_name": "div_16bit",
+    "description_type": "xml",
+    "final_status": "fail_sc",
+    "sc_trial": 10,
+    "ts_trial": 0,
+    "total_iter": 10,
+    "gvd": "module div_16bit (\n    input [15:0] A,\n    input [7:0] B,\n    output reg [15:0] result,\n    output reg [15:0] odd\n);\n\n    reg [15:0] a_reg;\n    reg [15:0] b_reg;\n\n    always @(*) begin\n        a_reg = A;\n        b_reg = {8'b0, B};\n    end\n\n    always @(*) begin\n        result = 0;\n        odd = 0;\n        reg [15:0] temp_a;\n        reg [15:0] temp_b;\n        reg [15:0] quotient;\n        reg [15:0] remainder;\n\n        temp_a = a_reg;\n        temp_b = b_reg;\n\n        for (int i = 0; i < 16; i = i + 1) begin\n            if (temp_a >= temp_b) begin\n                quotient = quotient | (1 << i);\n                temp_a = temp_a - temp_b + 1;\n            end else begin\n                quotient = quotient & ~(1 << i);\n            end\n            temp_b = temp_b << 1;\n        end\n\n        result = quotient;\n        odd = temp_a;\n    end\n\nendmodule\n",
+    "xml_description": "<module id=\"div_16bit\">\n    <description>Implement a 16-bit divider module, the dividend is 16-bit and the divider is 8-bit in combinational logic. Extract the higher bits of the dividend, matching the bit width of the divisor. Compare these bits with the divisor: if the dividend bits are greater, set the quotient to 1, otherwise set it to 0, and use the difference as the remainder. Concatenate the remainder with the highest remaining 1-bit of the dividend, and repeat the process until all dividend bits are processed.</description>\n    <ports>\n        <input id=\"A\">16-bit dividend.</input>\n        <input id=\"B\">8-bit divisor.</input>\n        <output id=\"result\">16-bit quotient.</output>\n        <output id=\"odd\">16-bit remainder.</output>\n    </ports>\n    <implementation>The module uses two always blocks to perform the division operation.\nThe first always block is a combinational block triggered by any change in the input values A and B. It updates the values of two registers, a_reg and b_reg, with the values of A and B, respectively.\nThe second always block is also a combinational block triggered by any change in the input values A and B.\n</implementation>\n</module>",
+    "sc_log": "%Error: div_16bit.v:19:20: syntax error, unexpected IDENTIFIER, expecting \"'{\"\n   19 |         reg [15:0] temp_a;\n      |                    ^~~~~~\n%Error: div_16bit.v:20:20: syntax error, unexpected IDENTIFIER, expecting \"'{\"\n   20 |         reg [15:0] temp_b;\n      |                    ^~~~~~\n%Error: div_16bit.v:21:20: syntax error, unexpected IDENTIFIER, expecting \"'{\"\n   21 |         reg [15:0] quotient;\n      |                    ^~~~~~~~\n%Error: div_16bit.v:22:20: syntax error, unexpected IDENTIFIER, expecting \"'{\"\n   22 |         reg [15:0] remainder;\n      |                    ^~~~~~~~~\n%Error: Exiting due to 4 error(s)\n",
+    "tb_log": null,
+    "error": null,
+    "edtm": {
+      "%Error: div_16bit.v:N:20: syntax error, unexpected IDENTIFIER, expecting \"'{\"": 10
+    }
+  }
+}

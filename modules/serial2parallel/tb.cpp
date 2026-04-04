@@ -2,6 +2,7 @@
 #include <verilated_vcd_c.h>
 #include <stdio.h>
 #include <vector>
+#include <deque>
 #include <time.h>
 #include <cmath>
 #include <iostream>
